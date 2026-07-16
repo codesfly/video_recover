@@ -1,0 +1,5 @@
+VideoRecover includes adapters that interoperate with yt-dlp, licensed under The
+Unlicense. The page-data fallback behavior was informed by publicly documented
+Douyin response shapes and by jiji262/douyin-downloader, an MIT-licensed project.
+No account, batch-download, comment, browser-automation, or transcription source
+from that project is included here.
