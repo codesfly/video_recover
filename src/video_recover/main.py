@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI
@@ -11,6 +12,7 @@ from fastapi import FastAPI
 from video_recover.api import build_router
 from video_recover.config import Settings
 from video_recover.crypto import CookieVault
+from video_recover.mcp_server import build_mcp
 from video_recover.parsers import DouyinPageParser, ParserChain, YtDlpParser
 from video_recover.repository import Repository
 from video_recover.runner import JobRunner
@@ -26,6 +28,7 @@ def probe_sqlite(database_path: Path) -> None:
 def build_lifespan(
     settings: Settings,
     runner: JobRunner | None,
+    mcp_http_app: Any,
 ) -> Callable[[FastAPI], AsyncIterator[None]]:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -33,7 +36,8 @@ def build_lifespan(
         app.state.runner_enabled = runner is not None
         thread = runner.start_thread() if runner is not None else None
         try:
-            yield
+            async with mcp_http_app.router.lifespan_context(mcp_http_app):
+                yield
         finally:
             if runner is not None:
                 runner.stop()
@@ -61,6 +65,8 @@ def create_app(
     config = settings or Settings()
     config.ensure_directories()
     video_service = service or build_service(config)
+    mcp = build_mcp(video_service)
+    mcp_http_app = mcp.streamable_http_app()
     runner = None
     if start_runner:
         runner = JobRunner(
@@ -71,11 +77,13 @@ def create_app(
     app = FastAPI(
         title="VideoRecover",
         version="0.1.0",
-        lifespan=build_lifespan(config, runner),
+        lifespan=build_lifespan(config, runner, mcp_http_app),
     )
     app.state.settings = config
     app.state.video_service = video_service
+    app.state.mcp = mcp
     app.include_router(build_router(video_service, config))
+    app.mount("/mcp", mcp_http_app)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
