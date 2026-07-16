@@ -6,6 +6,13 @@
 
 **Architecture:** A FastAPI control plane owns SQLite state, parsing, downloads, Web, REST, and MCP. A user LaunchAgent runs an MLX Whisper worker that long-polls the control plane for leased transcription jobs; a container CPU provider is the fallback. All interfaces call one application service and persist artifacts beneath one host-mounted data root.
 
+## Execution status (2026-07-17)
+
+- Tasks 1–12 are implemented and committed on `feature/video-recover`.
+- 70 non-live tests, including the real Chrome desktop/mobile E2E, pass.
+- The ARM64 Docker container is healthy after restart; Web, health, HTTP MCP, stdio MCP, Codex configuration, Claude Desktop configuration, persistence, and the macOS LaunchAgent have been verified locally.
+- The requested live URL correctly reaches the stable `cookie_required` state because Douyin now requires a browser-generated `s_v_web_id`. Final MP4/transcript acceptance and GitHub publication remain pending until a Cookie is saved through the local Web UI; no browser Cookie is read automatically.
+
 **Tech Stack:** Python 3.12, FastAPI, Pydantic Settings, SQLite, HTTPX, yt-dlp, cryptography/Fernet, official MCP Python SDK, Jinja2/vanilla JavaScript/CSS, faster-whisper CPU fallback, mlx-whisper on macOS, pytest, Ruff, Docker Compose.
 
 ---
