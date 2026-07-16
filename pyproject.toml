@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "video-recover"
+version = "0.1.0"
+description = "Local Douyin video recovery, transcription, Web, and MCP service"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "cryptography>=45,<47",
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "jinja2>=3.1,<4",
+  "mcp>=1.13,<2",
+  "pydantic-settings>=2.10,<3",
+  "python-multipart>=0.0.20,<1",
+  "uvicorn[standard]>=0.35,<1",
+  "yt-dlp>=2025.6.30",
+]
+
+[project.optional-dependencies]
+cpu = ["faster-whisper>=1.2,<2"]
+mac = ["mlx-whisper>=0.4,<1"]
+dev = [
+  "httpx2>=2,<3",
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+video-recover = "video_recover.main:run"
+video-recover-mcp = "video_recover.mcp_stdio:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/video_recover"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+  "live: requires live Douyin network access",
+  "mac_live: requires macOS and a real MLX model",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
