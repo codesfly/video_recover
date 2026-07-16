@@ -43,9 +43,16 @@ class CookieStatus(BaseModel):
     configured: bool
 
 
+class NativeWorkerStatus(BaseModel):
+    connected: bool
+    worker_id: str | None
+    last_seen: datetime | None
+
+
 class ServiceStatus(BaseModel):
     status: Literal["ok"]
     cookie: CookieStatus
+    worker: NativeWorkerStatus
     task_count: int
 
 
@@ -173,9 +180,22 @@ def build_router(service: VideoService, settings: Settings) -> APIRouter:
 
     @router.get("/api/status", response_model=ServiceStatus)
     def get_status() -> ServiceStatus:
+        worker_seen = service.repository.get_native_worker_seen()
+        worker_id = worker_seen[0] if worker_seen else None
+        last_seen = worker_seen[1] if worker_seen else None
+        connected = bool(
+            last_seen
+            and (service.repository.clock() - last_seen).total_seconds()
+            <= settings.native_worker_timeout_seconds
+        )
         return ServiceStatus(
             status="ok",
             cookie=CookieStatus(configured=service.cookie_configured()),
+            worker=NativeWorkerStatus(
+                connected=connected,
+                worker_id=worker_id,
+                last_seen=last_seen,
+            ),
             task_count=len(service.repository.list_tasks(limit=500)),
         )
 
@@ -196,6 +216,7 @@ def build_router(service: VideoService, settings: Settings) -> APIRouter:
         body: WorkerLeaseRequest,
         _auth: None = Depends(require_worker_token),
     ) -> WorkerLeaseResponse | Response:
+        service.repository.record_native_worker_seen(body.worker_id)
         lease = service.repository.acquire_transcription_lease(
             body.worker_id,
             ttl_seconds=settings.native_worker_timeout_seconds,

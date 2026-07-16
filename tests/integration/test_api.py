@@ -83,6 +83,22 @@ def test_worker_endpoint_requires_exact_bearer_token(tmp_path: Path) -> None:
     )
 
 
+def test_idle_worker_poll_is_visible_in_service_status(tmp_path: Path) -> None:
+    client, _ = make_client(tmp_path)
+    headers = {"Authorization": "Bearer test-worker-token-long-enough"}
+
+    lease = client.post(
+        "/internal/worker/lease",
+        headers=headers,
+        json={"worker_id": "macbook-m5"},
+    )
+    status_payload = client.get("/api/status").json()
+
+    assert lease.status_code == 204
+    assert status_payload["worker"]["connected"] is True
+    assert status_payload["worker"]["worker_id"] == "macbook-m5"
+
+
 def test_native_worker_lease_heartbeat_and_complete(tmp_path: Path) -> None:
     client, service = make_client(tmp_path)
     task, _ = service.submit(TEST_URL)

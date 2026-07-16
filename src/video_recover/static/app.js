@@ -170,7 +170,9 @@
 
   function setServiceStatus(status) {
     elements.serviceIndicator.classList.add("is-online");
-    elements.serviceLabel.textContent = "本地服务在线 · MCP 可用";
+    elements.serviceLabel.textContent = status.worker?.connected
+      ? "本地服务在线 · MLX Worker 就绪"
+      : "本地服务在线 · 等待 MLX Worker";
     elements.cookieBadge.textContent = status.cookie.configured ? "已加密保存" : "未设置";
   }
 

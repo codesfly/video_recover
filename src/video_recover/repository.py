@@ -300,6 +300,25 @@ class Repository:
             row = connection.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
         return None if row is None else str(row["value"])
 
+    def record_native_worker_seen(self, worker_id: str) -> None:
+        self.set_setting(
+            "native_worker_seen",
+            json.dumps(
+                {"worker_id": worker_id, "last_seen": _iso(self.clock())},
+                ensure_ascii=False,
+            ),
+        )
+
+    def get_native_worker_seen(self) -> tuple[str, datetime] | None:
+        value = self.get_setting("native_worker_seen")
+        if value is None:
+            return None
+        try:
+            payload = json.loads(value)
+            return str(payload["worker_id"]), _datetime(str(payload["last_seen"]))
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            return None
+
     def acquire_transcription_lease(
         self,
         worker_id: str,
