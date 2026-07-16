@@ -52,6 +52,7 @@ def test_up_script_builds_before_replacing_and_generates_token() -> None:
     up_index = script.index("docker compose up -d")
     assert build_index < up_index
     assert "openssl rand -hex 32" in script
+    assert 'chmod 600 "$ENV_FILE"' in script
     assert 'mkdir -p "$DATA_DIR/browser-capture"' in script
     assert "scripts/dev-check.sh" in script
 

@@ -44,6 +44,7 @@ for key, value in updates.items():
 env_path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
 PY
 
+chmod 600 "$ENV_FILE"
 mkdir -p "$DATA_DIR/browser-capture"
 cd "$PROJECT_ROOT"
 
