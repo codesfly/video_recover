@@ -29,6 +29,7 @@ flowchart LR
 - Apple Silicon Mac（M1 或更新；M5 / 32GB 很合适）
 - Docker Desktop
 - macOS 自带的 `openssl`、`curl` 和 `launchctl`
+- 宿主机 `ffmpeg`（没有时执行 `brew install ffmpeg`）
 - 安装 MLX Worker 时需要 Python 3.12 或更新版本
 - 首次构建和首次模型下载需要联网；建议预留至少 10GB 可用空间
 
@@ -75,7 +76,7 @@ cd video_recover
 
 ```bash
 launchctl print gui/$(id -u)/com.codesfly.video-recover.worker
-tail -f ~/Library/Logs/VideoRecover/worker.log
+tail -f ~/Library/Logs/VideoRecover/worker.error.log
 ```
 
 卸载 Worker（保留模型和馆藏）：
@@ -101,6 +102,23 @@ tail -f ~/Library/Logs/VideoRecover/worker.log
 - Cookie 使用 Fernet 加密后写入 SQLite；密钥文件权限为 `0600`。
 - API 和 Web 永远不会回显 Cookie 明文。
 - 保存后重试原任务即可。
+
+### Agent 使用登录态 Chrome 时
+
+浏览器自动化必须遵守凭据边界：Agent 可以确认登录状态、读取当前页面可见的作者/描述，以及下载页面已经加载的媒体，但不能读取或导出 Chrome Cookie、Local Storage、密码或会话文件。
+
+如果 Agent 能把当前页面媒体保存到宿主机的 `data/browser-capture/`，可用容器内的安全导入命令接管任务。导入器只接受该目录中的非空文件，拒绝任意本机路径，并会复用原先 `cookie_required` / `partial` 任务：
+
+```bash
+docker compose exec -T app video-recover-import \
+  --url 'https://www.douyin.com/video/7662212894569811235' \
+  --file '/data/browser-capture/7662212894569811235.mp4' \
+  --description '页面可见的发布描述' \
+  --author '页面可见的作者' \
+  --duration 19.9
+```
+
+命令只导入已经在本机落盘的媒体，不接受远端任意 URL，不读取 Cookie，也不会绕过验证码。必须在容器内运行，确保 SQLite 中保存的是跨 Docker/macOS Worker 可解析的 `/data` 路径。
 
 ## 本地产物
 
@@ -206,6 +224,7 @@ docker compose start app
 | `parser_changed` | 抖音页面结构可能更新；先更新项目和镜像，仍失败再提交脱敏问题。 |
 | Web 显示等待 MLX Worker | 运行安装脚本，检查 `launchctl print` 和 Worker 日志；确认 Docker 已启动。 |
 | 首次转写长时间无进度 | 通常在下载模型；检查 Worker 日志、网络和模型目录剩余空间。 |
+| Agent 不能读取 Chrome Cookie | 这是凭据安全边界；在 Web 手动保存 Cookie，或让 Agent 将已加载媒体保存到 `data/browser-capture/` 后使用安全导入命令。 |
 | 磁盘空间不足 | 清理其他文件或安全删除不需要的馆藏；系统会在低于保留阈值时停止下载。 |
 | Docker 占用持续偏高 | 保持 CPU 回退关闭；在 Docker Desktop 中检查是否有其他容器运行。 |
 | MCP 连接失败 | 先运行 `./scripts/dev-check.sh`；Codex URL 必须是 `/mcp`，Claude Desktop 配置后需重启。 |

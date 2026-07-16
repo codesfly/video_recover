@@ -34,6 +34,7 @@ dev = [
 
 [project.scripts]
 video-recover = "video_recover.main:run"
+video-recover-import = "video_recover.browser_import:main"
 video-recover-mcp = "video_recover.mcp_stdio:main"
 video-recover-mac-worker = "video_recover_mac.main:main"
 

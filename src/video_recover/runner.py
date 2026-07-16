@@ -37,7 +37,7 @@ class JobRunner:
 
     def run_once(self) -> bool:
         self.repository.recover_expired_leases()
-        task = self.repository.next_task(TaskStatus.QUEUED)
+        task = self.repository.claim_next_pipeline_task()
         if task is not None:
             try:
                 self.service.process_download(task.id, self.downloader)
@@ -74,6 +74,11 @@ class JobRunner:
             self.logger.exception("transcription pipeline failed", extra={"task_id": task.id})
             self.service.record_failure(task.id, InternalFailure(), lease_id=lease.id)
         return True
+
+    def recover_startup(self) -> int:
+        recovered = self.repository.recover_interrupted_pipeline()
+        self.repository.recover_expired_leases()
+        return recovered
 
     def run_forever(self) -> None:
         while not self._stop.is_set():

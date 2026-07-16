@@ -44,7 +44,7 @@ for key, value in updates.items():
 env_path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
 PY
 
-mkdir -p "$DATA_DIR"
+mkdir -p "$DATA_DIR/browser-capture"
 cd "$PROJECT_ROOT"
 
 echo "[1/3] 构建新镜像（当前服务保持运行）"

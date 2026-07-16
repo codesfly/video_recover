@@ -20,9 +20,13 @@
     <string>600</string>
     <key>HF_HOME</key>
     <string>__MODEL_DIR__</string>
+    <key>HF_HUB_DISABLE_XET</key>
+    <string>1</string>
+    <key>PATH</key>
+    <string>__WORKER_PATH__</string>
   </dict>
   <key>WorkingDirectory</key>
-  <string>__PROJECT_DIR__</string>
+  <string>__SUPPORT_DIR__</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>

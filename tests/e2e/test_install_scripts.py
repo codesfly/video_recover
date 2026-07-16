@@ -40,6 +40,9 @@ def test_launch_agent_runs_as_background_user_process() -> None:
     assert "__WORKER_EXECUTABLE__" in plist["ProgramArguments"]
     assert plist["EnvironmentVariables"]["VIDEO_RECOVER_DATA_DIR"] == "__DATA_DIR__"
     assert plist["EnvironmentVariables"]["VIDEO_RECOVER_WORKER_TOKEN"] == "__WORKER_TOKEN__"
+    assert plist["EnvironmentVariables"]["HF_HUB_DISABLE_XET"] == "1"
+    assert plist["EnvironmentVariables"]["PATH"] == "__WORKER_PATH__"
+    assert plist["WorkingDirectory"] == "__SUPPORT_DIR__"
 
 
 def test_up_script_builds_before_replacing_and_generates_token() -> None:
@@ -49,7 +52,24 @@ def test_up_script_builds_before_replacing_and_generates_token() -> None:
     up_index = script.index("docker compose up -d")
     assert build_index < up_index
     assert "openssl rand -hex 32" in script
+    assert 'mkdir -p "$DATA_DIR/browser-capture"' in script
     assert "scripts/dev-check.sh" in script
+
+
+def test_mac_worker_installer_retries_launchd_bootstrap_after_bootout() -> None:
+    script = (ROOT / "scripts/install-mac-worker.sh").read_text(encoding="utf-8")
+
+    assert "for attempt in {1..20}" in script
+    assert "sleep 0.25" in script
+    assert 'BOOTSTRAPPED="true"' in script
+
+
+def test_mac_worker_installer_requires_and_exports_ffmpeg() -> None:
+    script = (ROOT / "scripts/install-mac-worker.sh").read_text(encoding="utf-8")
+
+    assert "command -v ffmpeg" in script
+    assert "brew install ffmpeg" in script
+    assert 'WORKER_PATH="$(dirname "$FFMPEG_BIN")' in script
 
 
 def test_health_script_waits_for_docker_health_not_only_http() -> None:

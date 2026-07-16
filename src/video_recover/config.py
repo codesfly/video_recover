@@ -37,6 +37,10 @@ class Settings(BaseSettings):
         return self.data_dir / "cache"
 
     @property
+    def browser_capture_dir(self) -> Path:
+        return self.data_dir / "browser-capture"
+
+    @property
     def secret_key_path(self) -> Path:
         return self.data_dir / "secrets" / "app.key"
 
@@ -45,7 +49,7 @@ class Settings(BaseSettings):
             self.database_path.parent,
             self.download_dir,
             self.cache_dir,
+            self.browser_capture_dir,
             self.secret_key_path.parent,
         ):
             path.mkdir(parents=True, exist_ok=True)
-

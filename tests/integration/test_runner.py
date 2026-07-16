@@ -136,3 +136,30 @@ def test_parser_failure_is_categorized_without_internal_message(tmp_path):
     saved = repository.get_task(task.id)
     assert saved.status == TaskStatus.FAILED
     assert saved.error_code == "parser_changed"
+
+
+def test_runner_claims_queued_pipeline_task_atomically(tmp_path, monkeypatch):
+    service, repository, runner = make_context(tmp_path)
+    task, _ = service.submit(TEST_URL)
+    original_next_task = repository.next_task
+
+    def reject_non_atomic_pipeline_read(status):
+        assert status != TaskStatus.QUEUED
+        return original_next_task(status)
+
+    monkeypatch.setattr(repository, "next_task", reject_non_atomic_pipeline_read)
+
+    assert runner.run_once() is True
+    assert repository.get_task(task.id).status == TaskStatus.AWAITING_TRANSCRIPTION
+
+
+def test_runner_startup_recovery_requeues_interrupted_download(tmp_path):
+    service, repository, runner = make_context(tmp_path)
+    task, _ = service.submit(TEST_URL)
+    repository.transition(task.id, TaskStatus.RESOLVING, progress=5, message="正在解析")
+    repository.transition(task.id, TaskStatus.DOWNLOADING, progress=20, message="正在下载")
+
+    assert runner.recover_startup() == 1
+    assert repository.get_task(task.id).status == TaskStatus.QUEUED
+    assert runner.run_once() is True
+    assert repository.get_task(task.id).status == TaskStatus.AWAITING_TRANSCRIPTION

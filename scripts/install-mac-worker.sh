@@ -28,6 +28,13 @@ if [[ -z "${VIDEO_RECOVER_WORKER_TOKEN:-}" || -z "${VIDEO_RECOVER_DATA_DIR:-}" ]
   exit 1
 fi
 
+FFMPEG_BIN="$(command -v ffmpeg || true)"
+if [[ -z "$FFMPEG_BIN" ]]; then
+  echo "MLX Worker 需要 ffmpeg；请先运行：brew install ffmpeg" >&2
+  exit 1
+fi
+WORKER_PATH="$(dirname "$FFMPEG_BIN"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 PYTHON_BIN="${PYTHON_BIN:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
   PYTHON_BIN="$(command -v python3.12 || command -v python3)"
@@ -47,7 +54,8 @@ python3 - \
   "$VIDEO_RECOVER_DATA_DIR" \
   "$VIDEO_RECOVER_WORKER_TOKEN" \
   "$MODEL_DIR" \
-  "$PROJECT_ROOT" \
+  "$SUPPORT_DIR" \
+  "$WORKER_PATH" \
   "$LOG_DIR" <<'PY'
 from __future__ import annotations
 
@@ -63,7 +71,8 @@ replacements = dict(
             "__DATA_DIR__",
             "__WORKER_TOKEN__",
             "__MODEL_DIR__",
-            "__PROJECT_DIR__",
+            "__SUPPORT_DIR__",
+            "__WORKER_PATH__",
             "__LOG_DIR__",
         ),
         values,
@@ -93,8 +102,19 @@ PY
 
 DOMAIN="gui/$(id -u)"
 launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
-launchctl bootstrap "$DOMAIN" "$LAUNCH_AGENT"
+BOOTSTRAPPED="false"
+for attempt in {1..20}; do
+  if launchctl bootstrap "$DOMAIN" "$LAUNCH_AGENT"; then
+    BOOTSTRAPPED="true"
+    break
+  fi
+  sleep 0.25
+done
+if [[ "$BOOTSTRAPPED" != "true" ]]; then
+  echo "LaunchAgent 注册失败，请查看 launchd 日志。" >&2
+  exit 1
+fi
 launchctl kickstart -k "$DOMAIN/$LABEL"
 
 echo "macOS MLX Worker 已安装并在后台运行。"
-echo "日志：$LOG_DIR/worker.log"
+echo "日志：$LOG_DIR/worker.error.log"

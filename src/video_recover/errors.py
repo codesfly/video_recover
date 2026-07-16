@@ -52,6 +52,16 @@ class UnsafeMediaUrl(UserFacingError):
         super().__init__("unsafe_media_url", "解析器返回了不受信任的视频地址")
 
 
+class UnsafeCapture(UserFacingError):
+    def __init__(self) -> None:
+        super().__init__("unsafe_capture", "仅允许导入本机 data/browser-capture 中的有效视频")
+
+
+class CaptureConflict(UserFacingError):
+    def __init__(self) -> None:
+        super().__init__("capture_conflict", "该视频任务正在处理或已经完成，不能重复导入")
+
+
 class TranscriptionFailed(UserFacingError):
     def __init__(self, message: str = "视频已保存，但语音转写失败") -> None:
         super().__init__("transcription_failed", message, retryable=True)

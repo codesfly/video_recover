@@ -36,6 +36,8 @@ def build_lifespan(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.ensure_directories()
         app.state.runner_enabled = runner is not None
+        if runner is not None:
+            runner.recover_startup()
         thread = runner.start_thread() if runner is not None else None
         try:
             async with mcp_http_app.router.lifespan_context(mcp_http_app):

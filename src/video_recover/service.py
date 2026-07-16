@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 from pathlib import Path
@@ -11,7 +12,15 @@ import httpx
 from video_recover.config import Settings
 from video_recover.crypto import CookieVault
 from video_recover.domain import Segment, Task, TaskStatus
-from video_recover.errors import InvalidTransition, UserFacingError
+from video_recover.errors import (
+    CaptureConflict,
+    DownloadFailed,
+    DownloadTooLarge,
+    InsufficientStorage,
+    InvalidTransition,
+    UnsafeCapture,
+    UserFacingError,
+)
 from video_recover.parsers import Parser, ResolvedMedia
 from video_recover.repository import Repository
 from video_recover.transcript import write_artifacts
@@ -29,6 +38,33 @@ def _atomic_text(path: Path, content: str) -> None:
         output.flush()
         os.fsync(output.fileno())
     temporary.replace(path)
+
+
+def _atomic_copy(
+    source: Path,
+    target: Path,
+    *,
+    max_bytes: int,
+    minimum_free_bytes: int,
+) -> None:
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    try:
+        with source.open("rb") as input_file, temporary.open("wb") as output_file:
+            written = 0
+            while chunk := input_file.read(1024 * 1024):
+                written += len(chunk)
+                if written > max_bytes:
+                    raise DownloadTooLarge()
+                if shutil.disk_usage(target.parent).free < (
+                    len(chunk) + minimum_free_bytes
+                ):
+                    raise InsufficientStorage()
+                output_file.write(chunk)
+            output_file.flush()
+            os.fsync(output_file.fileno())
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 class VideoService:
@@ -76,14 +112,113 @@ class VideoService:
     def cookie_configured(self) -> bool:
         return self.repository.get_setting("douyin_cookie") is not None
 
+    def import_local_capture(
+        self,
+        url: str,
+        capture_path: Path,
+        *,
+        description: str,
+        author: str,
+        duration_seconds: float | None = None,
+        transcribe: bool = True,
+    ) -> Task:
+        normalized = normalize_douyin_url(url)
+        capture_root = self.settings.browser_capture_dir.resolve()
+        try:
+            source = capture_path.resolve()
+            if not source.is_relative_to(capture_root) or not source.is_file():
+                raise UnsafeCapture()
+            size = source.stat().st_size
+        except OSError as exc:
+            raise UnsafeCapture() from exc
+        if size < 1:
+            raise UnsafeCapture()
+        if size > self.settings.max_download_bytes:
+            raise DownloadTooLarge()
+        self.settings.download_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            free_bytes = shutil.disk_usage(self.settings.download_dir).free
+        except OSError as exc:
+            raise InsufficientStorage() from exc
+        if free_bytes < size + self.settings.minimum_free_bytes:
+            raise InsufficientStorage()
+        if duration_seconds is not None and (
+            not math.isfinite(duration_seconds) or duration_seconds < 0
+        ):
+            raise UnsafeCapture()
+
+        try:
+            task = self.repository.prepare_capture_task(
+                normalized.canonical_url,
+                original_url=url,
+                source="chrome",
+                transcribe=transcribe,
+            )
+        except InvalidTransition as exc:
+            raise CaptureConflict() from exc
+        try:
+            output_dir = self.settings.download_dir / normalized.aweme_id
+            output_dir.mkdir(parents=True, exist_ok=True)
+            metadata = {
+                "aweme_id": normalized.aweme_id,
+                "canonical_url": normalized.canonical_url,
+                "description": description,
+                "author": author,
+                "duration_seconds": duration_seconds,
+                "cover_url": None,
+                "capture_source": "chrome",
+            }
+            _atomic_text(
+                output_dir / "metadata.json",
+                json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+            )
+            _atomic_text(output_dir / "description.txt", description.strip() + "\n")
+            self.repository.set_media(
+                task.id,
+                aweme_id=normalized.aweme_id,
+                output_dir=output_dir,
+                metadata=metadata,
+            )
+            self.repository.transition(
+                task.id,
+                TaskStatus.DOWNLOADING,
+                progress=20,
+                message="正在导入本机视频",
+            )
+            _atomic_copy(
+                source,
+                output_dir / "video.mp4",
+                max_bytes=self.settings.max_download_bytes,
+                minimum_free_bytes=self.settings.minimum_free_bytes,
+            )
+            target = TaskStatus.AWAITING_TRANSCRIPTION if transcribe else TaskStatus.COMPLETED
+            return self.repository.transition(
+                task.id,
+                target,
+                progress=60 if transcribe else 100,
+                message="等待语音转写" if transcribe else "导入完成",
+            )
+        except UserFacingError as exc:
+            self.record_failure(task.id, exc)
+            raise
+        except OSError as exc:
+            error = DownloadFailed("本机视频导入失败，请检查磁盘后重试")
+            self.record_failure(task.id, error)
+            raise error from exc
+
     def process_download(self, task_id: str, downloader: DownloadFunction) -> Task:
         task = self.repository.get_task(task_id)
-        self.repository.transition(
-            task.id,
-            TaskStatus.RESOLVING,
-            progress=5,
-            message="正在解析视频",
-        )
+        if task.status == TaskStatus.QUEUED:
+            task = self.repository.transition(
+                task.id,
+                TaskStatus.RESOLVING,
+                progress=5,
+                message="正在解析视频",
+            )
+        elif task.status != TaskStatus.RESOLVING:
+            raise InvalidTransition(
+                f"cannot process a task in {task.status.value} state"
+            )
         media = self.parser.resolve(task.canonical_url, cookie=self.get_cookie())
         output_dir = self.settings.download_dir / media.aweme_id
         output_dir.mkdir(parents=True, exist_ok=True)

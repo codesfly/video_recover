@@ -159,6 +159,70 @@ class Repository:
             )
         return self.get_task(task_id), True
 
+    def prepare_capture_task(
+        self,
+        canonical_url: str,
+        *,
+        original_url: str,
+        source: str = "chrome",
+        transcribe: bool = True,
+    ) -> Task:
+        """Atomically reserve a canonical URL for a local browser capture import."""
+        now = _iso(self.clock())
+        task_id = str(uuid4())
+        message = "正在导入 Chrome 媒体"
+        with self.transaction(immediate=True) as connection:
+            existing = connection.execute(
+                "SELECT * FROM tasks WHERE canonical_url=?",
+                (canonical_url,),
+            ).fetchone()
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO tasks(
+                        id, canonical_url, original_url, status, progress, message,
+                        source, transcribe, created_at, updated_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        task_id,
+                        canonical_url,
+                        original_url,
+                        TaskStatus.RESOLVING.value,
+                        5,
+                        message,
+                        source,
+                        int(transcribe),
+                        now,
+                        now,
+                    ),
+                )
+            else:
+                task_id = str(existing["id"])
+                require_transition(TaskStatus(existing["status"]), TaskStatus.RESOLVING)
+                connection.execute(
+                    """
+                    UPDATE tasks
+                    SET original_url=?, status=?, progress=5, message=?, source=?,
+                        transcribe=?, error_code=NULL, error_message=NULL, updated_at=?
+                    WHERE id=?
+                    """,
+                    (
+                        original_url,
+                        TaskStatus.RESOLVING.value,
+                        message,
+                        source,
+                        int(transcribe),
+                        now,
+                        task_id,
+                    ),
+                )
+            connection.execute(
+                "INSERT INTO events(task_id, status, message, created_at) VALUES(?,?,?,?)",
+                (task_id, TaskStatus.RESOLVING.value, message, now),
+            )
+        return self.get_task(task_id)
+
     def get_task(self, task_id: str) -> Task:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
@@ -186,6 +250,63 @@ class Repository:
                 (status.value,),
             ).fetchone()
         return None if row is None else self._task(row)
+
+    def claim_next_pipeline_task(self) -> Task | None:
+        """Atomically move the oldest queued download into the resolving state."""
+        now = _iso(self.clock())
+        message = "正在解析视频"
+        with self.transaction(immediate=True) as connection:
+            row = connection.execute(
+                "SELECT * FROM tasks WHERE status=? ORDER BY created_at LIMIT 1",
+                (TaskStatus.QUEUED.value,),
+            ).fetchone()
+            if row is None:
+                return None
+            require_transition(TaskStatus(row["status"]), TaskStatus.RESOLVING)
+            connection.execute(
+                """
+                UPDATE tasks
+                SET status=?, progress=5, message=?, error_code=NULL,
+                    error_message=NULL, updated_at=?
+                WHERE id=?
+                """,
+                (TaskStatus.RESOLVING.value, message, now, row["id"]),
+            )
+            connection.execute(
+                "INSERT INTO events(task_id, status, message, created_at) VALUES(?,?,?,?)",
+                (row["id"], TaskStatus.RESOLVING.value, message, now),
+            )
+            task_id = str(row["id"])
+        return self.get_task(task_id)
+
+    def recover_interrupted_pipeline(self) -> int:
+        """Requeue pipeline work left in a transient state by a stopped process."""
+        now = _iso(self.clock())
+        message = "服务重启，任务已重新排队"
+        with self.transaction(immediate=True) as connection:
+            rows = connection.execute(
+                "SELECT id FROM tasks WHERE status IN (?, ?)",
+                (TaskStatus.RESOLVING.value, TaskStatus.DOWNLOADING.value),
+            ).fetchall()
+            for row in rows:
+                connection.execute(
+                    "DELETE FROM transcription_leases WHERE task_id=?",
+                    (row["id"],),
+                )
+                connection.execute(
+                    """
+                    UPDATE tasks
+                    SET status=?, progress=0, message=?, error_code=NULL,
+                        error_message=NULL, updated_at=?
+                    WHERE id=?
+                    """,
+                    (TaskStatus.QUEUED.value, message, now, row["id"]),
+                )
+                connection.execute(
+                    "INSERT INTO events(task_id, status, message, created_at) VALUES(?,?,?,?)",
+                    (row["id"], TaskStatus.QUEUED.value, message, now),
+                )
+        return len(rows)
 
     def transition(
         self,

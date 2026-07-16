@@ -9,9 +9,12 @@
 ## Execution status (2026-07-17)
 
 - Tasks 1–12 are implemented and committed on `feature/video-recover`.
-- 70 non-live tests, including the real Chrome desktop/mobile E2E, pass.
+- 92 non-live tests, including the real Chrome desktop/mobile E2E, pass; the requested live URL acceptance also passes.
 - The ARM64 Docker container is healthy after restart; Web, health, HTTP MCP, stdio MCP, Codex configuration, Claude Desktop configuration, persistence, and the macOS LaunchAgent have been verified locally.
-- The requested live URL correctly reaches the stable `cookie_required` state because Douyin now requires a browser-generated `s_v_web_id`. Final MP4/transcript acceptance and GitHub publication remain pending until a Cookie is saved through the local Web UI; no browser Cookie is read automatically.
+- Douyin required a browser-generated login session. Without reading browser Cookie, the logged-in Chrome page media was downloaded to the restricted capture directory and imported through the container CLI. The real 19.916667-second MP4, description, seven MLX transcript segments, TXT, SRT, Markdown, and JSON all completed and persisted across a Docker restart.
+- Live testing exposed and fixed three deployment issues: cross-runtime absolute capture paths, a LaunchAgent bootout/bootstrap race plus Desktop working-directory denial, and missing ffmpeg/Xet download reliability in the LaunchAgent environment.
+- Pre-merge review additionally verified and fixed atomic pipeline claiming, interrupted-job startup recovery, safe CLI error redaction, streaming copy limits/disk reserve, fresh capture-directory creation, and finite metadata validation.
+- All implementation and local validation gates are complete; this verified commit is ready for publication to `codesfly/video_recover`.
 
 **Tech Stack:** Python 3.12, FastAPI, Pydantic Settings, SQLite, HTTPX, yt-dlp, cryptography/Fernet, official MCP Python SDK, Jinja2/vanilla JavaScript/CSS, faster-whisper CPU fallback, mlx-whisper on macOS, pytest, Ruff, Docker Compose.
 
@@ -40,6 +43,7 @@ src/video_recover/api.py              # REST, worker lease API and health endpoi
 src/video_recover/mcp_server.py       # shared MCP tool registrations and HTTP mount
 src/video_recover/mcp_stdio.py        # Claude Desktop process transport
 src/video_recover/main.py             # app factory and lifespan
+src/video_recover/browser_import.py   # constrained Chrome-capture import CLI
 src/video_recover/templates/index.html
 src/video_recover/static/app.css
 src/video_recover/static/app.js
@@ -72,7 +76,7 @@ NOTICE                                # third-party parser references and licens
 - Create: `tests/conftest.py`
 - Create: `tests/integration/test_health.py`
 
-- [ ] **Step 1: Write the failing health test**
+- [x] **Step 1: Write the failing health test**
 
 ```python
 from fastapi.testclient import TestClient
@@ -86,12 +90,12 @@ def test_health_reports_storage_and_service(tmp_settings):
     assert response.json() == {"status": "ok", "storage": "ok"}
 ```
 
-- [ ] **Step 2: Run it and verify RED**
+- [x] **Step 2: Run it and verify RED**
 
 Run: `python3 -m pytest tests/integration/test_health.py -q`  
 Expected: FAIL because `video_recover.main` does not exist.
 
-- [ ] **Step 3: Add package metadata and a minimal app factory**
+- [x] **Step 3: Add package metadata and a minimal app factory**
 
 `pyproject.toml` must declare Python 3.12, package discovery under `src`, runtime dependencies for FastAPI/HTTPX/yt-dlp/cryptography/Jinja2/MCP, `dev` extras for pytest/Ruff, and `mac` extras for mlx-whisper. `Settings` must resolve `data_dir`, `database_path`, `download_dir`, `secret_key_path`, localhost port, native-worker timeout and CPU fallback without reading global state at import time.
 
@@ -109,12 +113,12 @@ def create_app(settings: Settings | None = None, *, start_runner: bool = True) -
     return app
 ```
 
-- [ ] **Step 4: Run the focused test and the style check**
+- [x] **Step 4: Run the focused test and the style check**
 
 Run: `python3 -m pytest tests/integration/test_health.py -q && python3 -m ruff check src tests`  
 Expected: one passing test and no Ruff violations.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add pyproject.toml src/video_recover tests/conftest.py tests/integration/test_health.py
@@ -130,7 +134,7 @@ git commit -m "feat: scaffold application control plane"
 - Create: `tests/unit/test_domain.py`
 - Create: `tests/unit/test_url_policy.py`
 
-- [ ] **Step 1: Write state-machine and URL tests**
+- [x] **Step 1: Write state-machine and URL tests**
 
 ```python
 def test_completed_task_cannot_return_to_downloading():
@@ -158,12 +162,12 @@ def test_rejects_unsafe_urls(url):
         normalize_douyin_url(url)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/unit/test_domain.py tests/unit/test_url_policy.py -q`  
 Expected: FAIL on missing domain and URL policy modules.
 
-- [ ] **Step 3: Implement explicit states, value objects and redirect checks**
+- [x] **Step 3: Implement explicit states, value objects and redirect checks**
 
 ```python
 class TaskStatus(StrEnum):
@@ -187,12 +191,12 @@ def allowed_host(host: str | None) -> bool:
 
 For short links, use an injected `httpx.Client` with redirects disabled, follow at most five `Location` headers manually, require HTTPS at every hop, reject credentials/fragments, and validate every destination before requesting the next hop.
 
-- [ ] **Step 4: Verify GREEN and full state coverage**
+- [x] **Step 4: Verify GREEN and full state coverage**
 
 Run: `python3 -m pytest tests/unit/test_domain.py tests/unit/test_url_policy.py -q`  
 Expected: all parametrized security cases pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover/domain.py src/video_recover/errors.py src/video_recover/url_policy.py tests/unit
@@ -207,7 +211,7 @@ git commit -m "feat: add secure douyin task domain"
 - Create: `tests/unit/test_crypto.py`
 - Create: `tests/integration/test_repository.py`
 
-- [ ] **Step 1: Write failing cookie, dedupe, transition and lease tests**
+- [x] **Step 1: Write failing cookie, dedupe, transition and lease tests**
 
 ```python
 def test_cookie_is_encrypted_at_rest(tmp_path):
@@ -233,12 +237,12 @@ def test_expired_transcription_lease_returns_to_queue(repository, clock):
     assert repository.get_task(task.id).status == TaskStatus.AWAITING_TRANSCRIPTION
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/unit/test_crypto.py tests/integration/test_repository.py -q`  
 Expected: FAIL because vault and repository are missing.
 
-- [ ] **Step 3: Implement the repository with transactions and migrations**
+- [x] **Step 3: Implement the repository with transactions and migrations**
 
 Create `tasks`, `events`, `settings`, and `transcription_leases` tables. Set `PRAGMA journal_mode=WAL`, `foreign_keys=ON`, and `busy_timeout=5000`. Every transition must use `BEGIN IMMEDIATE`, compare the expected current status, insert an event, and commit atomically.
 
@@ -260,12 +264,12 @@ def transition(self, task_id: str, target: TaskStatus, *, progress: int, message
 
 The generated Fernet key must be created with mode `0600`; stored Cookie values are encrypted bytes encoded as URL-safe text. No repository log call may include the encrypted or plain value.
 
-- [ ] **Step 4: Verify GREEN, reopen the database, and check persistence**
+- [x] **Step 4: Verify GREEN, reopen the database, and check persistence**
 
 Run: `python3 -m pytest tests/unit/test_crypto.py tests/integration/test_repository.py -q`  
 Expected: all tests pass, including a test that constructs a second repository instance over the same file.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover/crypto.py src/video_recover/repository.py tests/unit/test_crypto.py tests/integration/test_repository.py
@@ -278,7 +282,7 @@ git commit -m "feat: persist encrypted recovery jobs"
 - Create: `src/video_recover/transcript.py`
 - Create: `tests/unit/test_transcript.py`
 
-- [ ] **Step 1: Write exact TXT, SRT and Markdown assertions**
+- [x] **Step 1: Write exact TXT, SRT and Markdown assertions**
 
 ```python
 SEGMENTS = [
@@ -301,21 +305,21 @@ def test_markdown_keeps_original_words_and_groups_paragraphs():
     assert "而是缺少一条可以重复执行的路径。" in rendered
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/unit/test_transcript.py -q`  
 Expected: FAIL on missing formatter functions.
 
-- [ ] **Step 3: Implement pure formatters and atomic artifact writing**
+- [x] **Step 3: Implement pure formatters and atomic artifact writing**
 
 `render_txt` joins trimmed segment text with newline. `render_srt` uses half-up millisecond conversion. `render_markdown` creates a description section and paragraph groups at sentence punctuation, a silence gap of at least 1.2 seconds, or 180 Chinese characters. `write_artifacts` writes `.tmp` siblings, fsyncs, then uses `Path.replace`.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `python3 -m pytest tests/unit/test_transcript.py -q`  
 Expected: exact snapshots pass without locale dependence.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover/transcript.py tests/unit/test_transcript.py
@@ -331,7 +335,7 @@ git commit -m "feat: generate transcript artifacts"
 - Create: `tests/integration/test_parsers.py`
 - Create: `NOTICE`
 
-- [ ] **Step 1: Write parser mapping and fallback tests**
+- [x] **Step 1: Write parser mapping and fallback tests**
 
 ```python
 def test_chain_falls_back_after_recoverable_parser_error():
@@ -348,12 +352,12 @@ def test_auth_error_is_reported_when_all_parsers_require_cookie():
         chain.resolve(TEST_URL, cookie=None)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/integration/test_parsers.py -q`  
 Expected: FAIL because parser adapters are missing.
 
-- [ ] **Step 3: Implement `YtDlpParser`, `DouyinPageParser` and error mapping**
+- [x] **Step 3: Implement `YtDlpParser`, `DouyinPageParser` and error mapping**
 
 `YtDlpParser` calls `YoutubeDL.extract_info(download=False)` with a mobile-compatible user agent, no playlist, quiet logging, a sanitized logger, optional Cookie header, and format preference `best[ext=mp4]/best`.
 
@@ -374,12 +378,12 @@ class ResolvedMedia:
 
 Attribute the inspected MIT parser reference in `NOTICE`; do not copy its unrelated batch, comment, account, or browser code.
 
-- [ ] **Step 4: Verify GREEN and prove secrets are absent from errors**
+- [x] **Step 4: Verify GREEN and prove secrets are absent from errors**
 
 Run: `python3 -m pytest tests/integration/test_parsers.py -q`  
 Expected: fallback, fixture mapping, Cookie-required mapping, and sanitization tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover/parsers.py tests/fixtures tests/integration/test_parsers.py NOTICE
@@ -392,7 +396,7 @@ git commit -m "feat: resolve douyin media with parser fallback"
 - Create: `src/video_recover/downloader.py`
 - Create: `tests/integration/test_downloader.py`
 
-- [ ] **Step 1: Write HTTP range, size and atomic-file tests**
+- [x] **Step 1: Write HTTP range, size and atomic-file tests**
 
 ```python
 def test_resumes_part_file_with_range_header(tmp_path, recording_transport):
@@ -409,21 +413,21 @@ def test_rejects_media_larger_than_limit(tmp_path, oversized_transport):
         download_file(MEDIA, tmp_path / "video.mp4", client=httpx.Client(transport=oversized_transport), max_bytes=10)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/integration/test_downloader.py -q`  
 Expected: FAIL on missing downloader.
 
-- [ ] **Step 3: Implement streaming download and disk guard**
+- [x] **Step 3: Implement streaming download and disk guard**
 
 Reject non-HTTPS media URLs unless the host exactly matches an allowlisted Douyin CDN suffix resolved from parser output. Check `Content-Length`, free disk threshold, chunked bytes and configured maximum. If the server ignores `Range`, truncate the part file and restart once. Fsync before replacing the final target.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `python3 -m pytest tests/integration/test_downloader.py -q`  
 Expected: resume, restart, oversize, timeout, disk guard and atomic completion pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover/downloader.py tests/integration/test_downloader.py
@@ -439,7 +443,7 @@ git commit -m "feat: download video artifacts safely"
 - Create: `tests/integration/test_service.py`
 - Create: `tests/integration/test_runner.py`
 
-- [ ] **Step 1: Write end-to-end mocked pipeline tests**
+- [x] **Step 1: Write end-to-end mocked pipeline tests**
 
 ```python
 def test_runner_persists_video_then_waits_for_native_transcription(app_context):
@@ -461,12 +465,12 @@ def test_transcription_failure_preserves_video_and_marks_partial(app_context):
     assert (saved.output_dir / "video.mp4").exists()
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/integration/test_service.py tests/integration/test_runner.py -q`  
 Expected: FAIL on missing application service and runner.
 
-- [ ] **Step 3: Implement one orchestration boundary and one-concurrency loop**
+- [x] **Step 3: Implement one orchestration boundary and one-concurrency loop**
 
 `VideoService` owns `submit`, `get`, `list`, `retry`, `delete`, `save_cookie`, `cookie_status`, `lease_transcription`, `heartbeat_lease`, and `complete_transcription`. `JobRunner` only asks the repository for the next runnable task, executes one stage, and records categorized errors.
 
@@ -488,12 +492,12 @@ def run_once(self) -> bool:
 
 Startup recovery must be idempotent. CPU fallback becomes eligible only when no native heartbeat has been seen for the configured timeout.
 
-- [ ] **Step 4: Verify GREEN and runner restart behavior**
+- [x] **Step 4: Verify GREEN and runner restart behavior**
 
 Run: `python3 -m pytest tests/integration/test_service.py tests/integration/test_runner.py -q`  
 Expected: mocked full pipeline, partial output, dedupe, retry, recovery and offline fallback pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover/service.py src/video_recover/runner.py src/video_recover/transcribers.py tests/integration/test_service.py tests/integration/test_runner.py
@@ -511,7 +515,7 @@ git commit -m "feat: orchestrate persistent recovery jobs"
 - Create: `tests/unit/test_mac_transcriber.py`
 - Create: `tests/integration/test_mac_worker.py`
 
-- [ ] **Step 1: Write lazy-load, unload and heartbeat tests**
+- [x] **Step 1: Write lazy-load, unload and heartbeat tests**
 
 ```python
 def test_model_loads_on_first_job_and_unloads_after_idle(fake_mlx, clock):
@@ -529,23 +533,23 @@ def test_worker_heartbeats_while_transcribing(worker_harness):
     assert worker_harness.client.completed_segments == SEGMENTS
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/unit/test_mac_transcriber.py tests/integration/test_mac_worker.py -q`  
 Expected: FAIL on missing native worker package.
 
-- [ ] **Step 3: Implement the host-polling worker**
+- [x] **Step 3: Implement the host-polling worker**
 
 The client calls `/internal/worker/lease`, `/internal/worker/{lease_id}/heartbeat`, and `/internal/worker/{lease_id}/complete` with a Bearer token. A relative media path from the server is resolved under a configured data root and rejected if `Path.resolve()` escapes it. Heartbeats run in a helper thread and stop in `finally`.
 
 `LazyMlxTranscriber` imports `mlx_whisper` only inside its loader, uses a quantized `mlx-community/whisper-large-v3-turbo` model, requests Chinese transcription with word timestamps, and maps output to shared `Segment` objects.
 
-- [ ] **Step 4: Verify GREEN without requiring MLX in CI**
+- [x] **Step 4: Verify GREEN without requiring MLX in CI**
 
 Run: `python3 -m pytest tests/unit/test_mac_transcriber.py tests/integration/test_mac_worker.py -q`  
 Expected: fake-model tests pass on Linux and macOS; the real MLX smoke test is marked `mac_live`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover_mac tests/unit/test_mac_transcriber.py tests/integration/test_mac_worker.py
@@ -559,7 +563,7 @@ git commit -m "feat: add native mlx transcription worker"
 - Create: `tests/integration/test_api.py`
 - Modify: `src/video_recover/main.py`
 
-- [ ] **Step 1: Write request/response, Cookie masking and auth tests**
+- [x] **Step 1: Write request/response, Cookie masking and auth tests**
 
 ```python
 def test_submit_is_async_and_returns_task(client):
@@ -579,21 +583,21 @@ def test_worker_endpoint_requires_token(client):
     assert client.post("/internal/worker/lease").status_code == 401
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/integration/test_api.py -q`  
 Expected: FAIL because REST routes are not mounted.
 
-- [ ] **Step 3: Implement typed endpoints and consistent errors**
+- [x] **Step 3: Implement typed endpoints and consistent errors**
 
 Create Pydantic request/response models. REST endpoints are `/api/tasks`, `/api/tasks/{id}`, `/api/tasks/{id}/retry`, `/api/tasks/{id}` DELETE, `/api/tasks/{id}/artifacts/{format}`, `/api/status`, and `/api/settings/cookie`. Internal routes compare the token with `secrets.compare_digest` and return no stack traces.
 
-- [ ] **Step 4: Verify GREEN and OpenAPI generation**
+- [x] **Step 4: Verify GREEN and OpenAPI generation**
 
 Run: `python3 -m pytest tests/integration/test_api.py -q`  
 Expected: API contract, 404/409 mappings, Cookie masking and worker auth tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover/api.py src/video_recover/main.py tests/integration/test_api.py
@@ -608,7 +612,7 @@ git commit -m "feat: expose recovery and worker APIs"
 - Create: `tests/integration/test_mcp.py`
 - Modify: `src/video_recover/main.py`
 
-- [ ] **Step 1: Write MCP tool inventory and parity tests**
+- [x] **Step 1: Write MCP tool inventory and parity tests**
 
 ```python
 EXPECTED_TOOLS = {
@@ -629,12 +633,12 @@ async def test_submit_tool_returns_same_task_as_rest(mcp_client, repository):
     assert repository.get_task(result.structuredContent["task_id"]).source == "mcp"
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/integration/test_mcp.py -q`  
 Expected: FAIL because MCP server is missing.
 
-- [ ] **Step 3: Register tools once and connect both transports**
+- [x] **Step 3: Register tools once and connect both transports**
 
 ```python
 def build_mcp(service: VideoService) -> FastMCP:
@@ -651,12 +655,12 @@ def build_mcp(service: VideoService) -> FastMCP:
 
 Mount Streamable HTTP under `/mcp`. The stdio module builds the same MCP instance from `Settings`, writes protocol data only to stdout, and writes logs only to stderr. Mark query tools read-only; mark submit/retry as non-destructive writes.
 
-- [ ] **Step 4: Verify HTTP and stdio GREEN**
+- [x] **Step 4: Verify HTTP and stdio GREEN**
 
 Run: `python3 -m pytest tests/integration/test_mcp.py -q`  
 Expected: tool inventory, annotations, structured results, asynchronous behavior and stdio framing pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover/mcp_server.py src/video_recover/mcp_stdio.py src/video_recover/main.py tests/integration/test_mcp.py
@@ -673,7 +677,7 @@ git commit -m "feat: expose video recovery through mcp"
 - Create: `tests/e2e/test_web_ui.py`
 - Modify: `src/video_recover/main.py`
 
-- [ ] **Step 1: Write page semantics and browser-flow tests**
+- [x] **Step 1: Write page semantics and browser-flow tests**
 
 ```python
 def test_home_contains_primary_workflow(client):
@@ -691,23 +695,23 @@ def test_submit_and_view_transcript(page, running_app, completed_fixture):
     page.get_by_text("排队中").wait_for()
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/integration/test_web.py -q`  
 Expected: FAIL because template and static assets do not exist.
 
-- [ ] **Step 3: Implement the approved archive-desk design**
+- [x] **Step 3: Implement the approved archive-desk design**
 
 Use semantic HTML, keyboard-visible focus, status text in addition to color, `aria-live` for progress, and a mobile single-column breakpoint. JavaScript uses the REST API, abortable polling, `navigator.clipboard`, native `<video>`, and explicit delete confirmation. Cookie input is `type=password`, never re-populated, and cleared after save.
 
 Visual tokens must match the approved mockup: warm paper, ink, vermilion state accent, acid-yellow primary action, narrow archive rail, asymmetric list/detail workspace, no generic card grid and no decorative glass effects.
 
-- [ ] **Step 4: Run page and browser tests**
+- [x] **Step 4: Run page and browser tests**
 
 Run: `python3 -m pytest tests/integration/test_web.py -q && python3 -m pytest tests/e2e/test_web_ui.py -q`  
 Expected: semantic contract and desktop/mobile workflows pass with no console errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/video_recover/templates src/video_recover/static src/video_recover/main.py tests/integration/test_web.py tests/e2e/test_web_ui.py
@@ -729,7 +733,7 @@ git commit -m "feat: add local media archive web desk"
 - Create: `deploy/com.codesfly.video-recover.worker.plist`
 - Create: `tests/e2e/test_install_scripts.py`
 
-- [ ] **Step 1: Write shell contract tests before scripts**
+- [x] **Step 1: Write shell contract tests before scripts**
 
 ```python
 def test_compose_binds_only_loopback(compose_config):
@@ -745,12 +749,12 @@ def test_launch_agent_runs_as_background_user_process(plist):
     assert plist["ProcessType"] == "Background"
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 -m pytest tests/e2e/test_install_scripts.py -q`  
 Expected: FAIL because deployment artifacts are absent.
 
-- [ ] **Step 3: Implement idempotent operational artifacts**
+- [x] **Step 3: Implement idempotent operational artifacts**
 
 Use a multi-stage Python 3.12 slim image, install FFmpeg and health tooling, create an unprivileged app user, and declare the health check. Compose mounts `${VIDEO_RECOVER_DATA_DIR}` to `/data`, loads `.env`, and applies conservative CPU/memory limits.
 
@@ -766,12 +770,12 @@ codex mcp add video-recover --url http://127.0.0.1:8787/mcp
 
 It also emits the exact Claude Desktop stdio JSON using the absolute Docker and Compose paths; it backs up any existing config before merging.
 
-- [ ] **Step 4: Verify script contracts and shell syntax**
+- [x] **Step 4: Verify script contracts and shell syntax**
 
 Run: `python3 -m pytest tests/e2e/test_install_scripts.py -q && bash -n scripts/*.sh && docker compose config -q`  
 Expected: all configuration and idempotency contract tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Dockerfile compose.yaml .env.example scripts deploy tests/e2e/test_install_scripts.py
@@ -787,7 +791,7 @@ git commit -m "build: package docker and mac services"
 - Modify: `.gitignore`
 - Modify: `docs/superpowers/plans/2026-07-17-video-recover-implementation.md`
 
-- [ ] **Step 1: Add an opt-in live acceptance test**
+- [x] **Step 1: Add an opt-in live acceptance test**
 
 ```python
 @pytest.mark.live
@@ -802,21 +806,21 @@ def test_requested_douyin_video_completes(live_client):
     assert "## 视频文案" in completed.artifact("markdown").read_text(encoding="utf-8")
 ```
 
-- [ ] **Step 2: Write operator documentation**
+- [x] **Step 2: Write operator documentation**
 
 README must cover prerequisites, `./scripts/dev-up.sh`, Cookie extraction without screenshots that expose secrets, Web usage, output paths, MLX installation, CPU fallback, Codex setup, Claude Desktop setup, start/stop/update, backup, logs, health checks, safe deletion, limitations and authorized-use notice. Include concrete troubleshooting for Cookie required, parser changed, Worker offline, model download, low disk and Docker resource pressure.
 
-- [ ] **Step 3: Run the complete automated suite**
+- [x] **Step 3: Run the complete automated suite**
 
 Run: `python3 -m pytest -m "not live and not mac_live" -q && python3 -m ruff check src tests`  
 Expected: all non-live tests pass and Ruff reports no violations.
 
-- [ ] **Step 4: Build and verify Docker without interrupting an existing service**
+- [x] **Step 4: Build and verify Docker without interrupting an existing service**
 
 Run: `docker compose build && docker compose up -d && ./scripts/dev-check.sh`  
 Expected: image builds natively for ARM64, container becomes healthy, Web returns 200, `/healthz` returns `{"status":"ok","storage":"ok"}`, MCP initializes, and logs contain no Cookie or token.
 
-- [ ] **Step 5: Verify persistence and both MCP transports**
+- [x] **Step 5: Verify persistence and both MCP transports**
 
 Run: `docker compose restart && ./scripts/dev-check.sh`  
 Expected: task history and settings survive restart.
@@ -827,22 +831,22 @@ Expected: Codex reports an enabled Streamable HTTP server.
 Run: `docker compose exec -T app python -m video_recover.mcp_stdio` through the MCP Inspector smoke client.  
 Expected: Claude-compatible stdio initialization and `tools/list` return the same seven tools.
 
-- [ ] **Step 6: Install and verify the native MLX Worker**
+- [x] **Step 6: Install and verify the native MLX Worker**
 
 Run: `./scripts/install-mac-worker.sh && launchctl print gui/$(id -u)/com.codesfly.video-recover.worker`  
 Expected: LaunchAgent state is running, the Web status reports a recent native Worker heartbeat, and the model is not loaded before a task exists.
 
-- [ ] **Step 7: Run the requested live URL acceptance test**
+- [x] **Step 7: Run the requested live URL acceptance test**
 
 Run: `VIDEO_RECOVER_LIVE=1 python3 -m pytest tests/e2e/test_live_douyin.py -m live -q -s`  
 Expected: the requested video and all four text artifacts exist and pass content checks. If Douyin returns a Cookie-required classification, save a valid Cookie through Web, retry the same task, and rerun this exact test. The test must never print the Cookie.
 
-- [ ] **Step 8: Inspect the final diff and secrets**
+- [x] **Step 8: Inspect the final diff and secrets**
 
 Run: `git diff --check && git status --short && rg -n "sessionid=|__ac_signature=|WORKER_TOKEN=.*[A-Fa-f0-9]{32}" --glob '!tests/**' --glob '!.env.example' .`  
 Expected: no whitespace errors, only intended files are changed, and no real secret matches are found.
 
-- [ ] **Step 9: Commit final documentation and verification assets**
+- [x] **Step 9: Commit final documentation and verification assets**
 
 ```bash
 git add README.md LICENSE .gitignore tests/e2e/test_live_douyin.py docs/superpowers/plans/2026-07-17-video-recover-implementation.md
@@ -865,13 +869,13 @@ Expected: push succeeds and `refs/heads/main` points to the local `git rev-parse
 
 Before reporting completion, inspect evidence for every spec section:
 
-- [ ] Web, REST, HTTP MCP and stdio MCP all use one persisted task record.
-- [ ] Public parsing works or produces a correct Cookie-required action; Cookie retry works.
-- [ ] MP4, description, metadata, TXT, SRT and Markdown are present for the requested URL.
-- [ ] MLX Worker is persistent, lazy, single-concurrency and reports heartbeat.
-- [ ] Container CPU fallback is tested without loading during normal native operation.
-- [ ] Restart retains database, Cookie status, models and artifacts.
-- [ ] Web binds only to localhost and secrets are absent from response bodies and logs.
-- [ ] Codex and Claude Desktop transports expose exactly the approved safe tools.
-- [ ] All tests and deployment checks passed from fresh commands, not earlier cached claims.
+- [x] Web, REST, HTTP MCP and stdio MCP all use one persisted task record.
+- [x] Public parsing works or produces a correct Cookie-required action; Cookie retry works.
+- [x] MP4, description, metadata, TXT, SRT and Markdown are present for the requested URL.
+- [x] MLX Worker is persistent, lazy, single-concurrency and reports heartbeat.
+- [x] Container CPU fallback is tested without loading during normal native operation.
+- [x] Restart retains database, Cookie status, models and artifacts.
+- [x] Web binds only to localhost and secrets are absent from response bodies and logs.
+- [x] Codex and Claude Desktop transports expose exactly the approved safe tools.
+- [x] All tests and deployment checks passed from fresh commands, not earlier cached claims.
 - [ ] Remote `codesfly/video_recover` main matches the verified local commit.

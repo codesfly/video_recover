@@ -82,6 +82,55 @@ def test_invalid_transition_does_not_change_database(repository):
     assert repository.get_task(task.id).status == TaskStatus.QUEUED
 
 
+def test_claim_next_pipeline_task_atomically_reserves_queued_work(repository):
+    task, _ = repository.create_or_get_task(TEST_URL)
+
+    claimed = repository.claim_next_pipeline_task()
+
+    assert claimed is not None
+    assert claimed.id == task.id
+    assert claimed.status == TaskStatus.RESOLVING
+    assert repository.claim_next_pipeline_task() is None
+    assert [event.status for event in repository.list_events(task.id)] == [
+        TaskStatus.QUEUED,
+        TaskStatus.RESOLVING,
+    ]
+
+
+def test_startup_recovery_requeues_interrupted_pipeline_tasks(repository):
+    resolving, _ = repository.create_or_get_task(TEST_URL)
+    repository.transition(
+        resolving.id,
+        TaskStatus.RESOLVING,
+        progress=5,
+        message="正在解析",
+    )
+    downloading, _ = repository.create_or_get_task(
+        "https://www.douyin.com/video/7662212894569811236"
+    )
+    repository.transition(
+        downloading.id,
+        TaskStatus.RESOLVING,
+        progress=5,
+        message="正在解析",
+    )
+    repository.transition(
+        downloading.id,
+        TaskStatus.DOWNLOADING,
+        progress=20,
+        message="正在下载",
+    )
+
+    assert repository.recover_interrupted_pipeline() == 2
+
+    for task_id in (resolving.id, downloading.id):
+        recovered = repository.get_task(task_id)
+        assert recovered.status == TaskStatus.QUEUED
+        assert recovered.progress == 0
+        assert recovered.error_code is None
+        assert repository.list_events(task_id)[-1].status == TaskStatus.QUEUED
+
+
 def test_expired_transcription_lease_returns_to_queue(repository, clock):
     task, _ = repository.create_or_get_task(TEST_URL)
     repository.transition(task.id, TaskStatus.RESOLVING, progress=5, message="解析")
