@@ -8,6 +8,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from video_recover.api import build_router
 from video_recover.config import Settings
@@ -18,6 +19,7 @@ from video_recover.repository import Repository
 from video_recover.runner import JobRunner
 from video_recover.service import VideoService
 from video_recover.transcribers import CpuTranscriber
+from video_recover.web import STATIC_DIR, build_web_router
 
 
 def probe_sqlite(database_path: Path) -> None:
@@ -83,6 +85,8 @@ def create_app(
     app.state.video_service = video_service
     app.state.mcp = mcp
     app.include_router(build_router(video_service, config))
+    app.include_router(build_web_router())
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.mount("/mcp", mcp_http_app)
 
     @app.get("/healthz")
