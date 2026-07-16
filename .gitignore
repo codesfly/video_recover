@@ -8,10 +8,10 @@ __pycache__/
 .coverage
 htmlcov/
 .superpowers/
+.worktrees/
 data/
 downloads/
 models/
 dist/
 build/
 *.egg-info/
-
