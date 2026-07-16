@@ -37,6 +37,21 @@ class DownloadFailed(UserFacingError):
         super().__init__("download_failed", message, retryable=True)
 
 
+class DownloadTooLarge(UserFacingError):
+    def __init__(self) -> None:
+        super().__init__("download_too_large", "视频超过允许的最大文件大小")
+
+
+class InsufficientStorage(UserFacingError):
+    def __init__(self) -> None:
+        super().__init__("insufficient_storage", "本地磁盘空间不足，请清理空间后重试")
+
+
+class UnsafeMediaUrl(UserFacingError):
+    def __init__(self) -> None:
+        super().__init__("unsafe_media_url", "解析器返回了不受信任的视频地址")
+
+
 class TranscriptionFailed(UserFacingError):
     def __init__(self, message: str = "视频已保存，但语音转写失败") -> None:
         super().__init__("transcription_failed", message, retryable=True)
@@ -45,4 +60,3 @@ class TranscriptionFailed(UserFacingError):
 class InternalFailure(UserFacingError):
     def __init__(self) -> None:
         super().__init__("internal_failure", "处理失败，请查看脱敏日志后重试", retryable=True)
-
