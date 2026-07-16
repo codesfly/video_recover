@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Protocol
 
@@ -10,7 +11,7 @@ import httpx
 from video_recover.config import Settings
 from video_recover.crypto import CookieVault
 from video_recover.domain import Segment, Task, TaskStatus
-from video_recover.errors import UserFacingError
+from video_recover.errors import InvalidTransition, UserFacingError
 from video_recover.parsers import Parser, ResolvedMedia
 from video_recover.repository import Repository
 from video_recover.transcript import write_artifacts
@@ -155,3 +156,20 @@ class VideoService:
         progress = 60 if target == TaskStatus.AWAITING_TRANSCRIPTION else 0
         return self.repository.transition(task.id, target, progress=progress, message="已重新排队")
 
+    def delete(self, task_id: str) -> None:
+        task = self.repository.get_task(task_id)
+        if task.status in {
+            TaskStatus.RESOLVING,
+            TaskStatus.DOWNLOADING,
+            TaskStatus.AWAITING_TRANSCRIPTION,
+            TaskStatus.TRANSCRIBING,
+        }:
+            raise InvalidTransition("cannot delete a task while it is processing")
+        if task.output_dir is not None:
+            root = self.settings.download_dir.resolve()
+            output_dir = task.output_dir.resolve()
+            if not output_dir.is_relative_to(root):
+                raise RuntimeError("task output directory escapes download root")
+            shutil.rmtree(output_dir, ignore_errors=True)
+        if not self.repository.delete_task(task_id):
+            raise KeyError(task_id)

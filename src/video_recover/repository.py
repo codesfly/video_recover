@@ -174,6 +174,11 @@ class Repository:
             ).fetchall()
         return [self._task(row) for row in rows]
 
+    def delete_task(self, task_id: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+        return cursor.rowcount == 1
+
     def next_task(self, status: TaskStatus) -> Task | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -356,6 +361,23 @@ class Repository:
                 ),
             )
         return cursor.rowcount == 1
+
+    def get_transcription_lease(self, lease_id: str) -> TranscriptionLease:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM transcription_leases WHERE id=?",
+                (lease_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(lease_id)
+        return TranscriptionLease(
+            id=str(row["id"]),
+            task_id=str(row["task_id"]),
+            worker_id=str(row["worker_id"]),
+            acquired_at=_datetime(row["acquired_at"]),
+            heartbeat_at=_datetime(row["heartbeat_at"]),
+            expires_at=_datetime(row["expires_at"]),
+        )
 
     def recover_expired_leases(self) -> int:
         now = _iso(self.clock())
