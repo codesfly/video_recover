@@ -34,9 +34,10 @@ dev = [
 [project.scripts]
 video-recover = "video_recover.main:run"
 video-recover-mcp = "video_recover.mcp_stdio:main"
+video-recover-mac-worker = "video_recover_mac.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/video_recover"]
+packages = ["src/video_recover", "src/video_recover_mac"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
