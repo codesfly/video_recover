@@ -8,13 +8,13 @@
 
 ## Execution status (2026-07-17)
 
-- Tasks 1–12 are implemented and committed on `feature/video-recover`.
+- Tasks 1–12 and the final hardening fixes are implemented and merged into `main`.
 - 92 non-live tests, including the real Chrome desktop/mobile E2E, pass; the requested live URL acceptance also passes.
 - The ARM64 Docker container is healthy after restart; Web, health, HTTP MCP, stdio MCP, Codex configuration, Claude Desktop configuration, persistence, and the macOS LaunchAgent have been verified locally.
 - Douyin required a browser-generated login session. Without reading browser Cookie, the logged-in Chrome page media was downloaded to the restricted capture directory and imported through the container CLI. The real 19.916667-second MP4, description, seven MLX transcript segments, TXT, SRT, Markdown, and JSON all completed and persisted across a Docker restart.
 - Live testing exposed and fixed three deployment issues: cross-runtime absolute capture paths, a LaunchAgent bootout/bootstrap race plus Desktop working-directory denial, and missing ffmpeg/Xet download reliability in the LaunchAgent environment.
 - Pre-merge review additionally verified and fixed atomic pipeline claiming, interrupted-job startup recovery, safe CLI error redaction, streaming copy limits/disk reserve, fresh capture-directory creation, and finite metadata validation.
-- All implementation and local validation gates are complete; this verified commit is ready for publication to `codesfly/video_recover`.
+- GitHub publication to `codesfly/video_recover` succeeded over SSH and the remote `main` hash was verified against local `main`.
 
 **Tech Stack:** Python 3.12, FastAPI, Pydantic Settings, SQLite, HTTPX, yt-dlp, cryptography/Fernet, official MCP Python SDK, Jinja2/vanilla JavaScript/CSS, faster-whisper CPU fallback, mlx-whisper on macOS, pytest, Ruff, Docker Compose.
 
@@ -853,7 +853,7 @@ git add README.md LICENSE .gitignore tests/e2e/test_live_douyin.py docs/superpow
 git commit -m "docs: add operations and acceptance guide"
 ```
 
-- [ ] **Step 10: Publish the verified main branch**
+- [x] **Step 10: Publish the verified main branch**
 
 The target repository was confirmed to exist with no refs. Use SSH because the local GitHub CLI token is invalid:
 
@@ -878,4 +878,4 @@ Before reporting completion, inspect evidence for every spec section:
 - [x] Web binds only to localhost and secrets are absent from response bodies and logs.
 - [x] Codex and Claude Desktop transports expose exactly the approved safe tools.
 - [x] All tests and deployment checks passed from fresh commands, not earlier cached claims.
-- [ ] Remote `codesfly/video_recover` main matches the verified local commit.
+- [x] Remote `codesfly/video_recover` main matches the verified local commit.
