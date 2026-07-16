@@ -28,6 +28,7 @@ ALLOWED_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
     TaskStatus.DOWNLOADING: frozenset(
         {
             TaskStatus.AWAITING_TRANSCRIPTION,
+            TaskStatus.COMPLETED,
             TaskStatus.FAILED,
             TaskStatus.CANCELLED,
         }
@@ -103,4 +104,3 @@ class TranscriptionLease:
     acquired_at: datetime
     heartbeat_at: datetime
     expires_at: datetime
-

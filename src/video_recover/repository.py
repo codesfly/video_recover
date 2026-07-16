@@ -15,6 +15,7 @@ from video_recover.domain import (
     TranscriptionLease,
     require_transition,
 )
+from video_recover.errors import UserFacingError
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
@@ -173,6 +174,14 @@ class Repository:
             ).fetchall()
         return [self._task(row) for row in rows]
 
+    def next_task(self, status: TaskStatus) -> Task | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM tasks WHERE status=? ORDER BY created_at LIMIT 1",
+                (status.value,),
+            ).fetchone()
+        return None if row is None else self._task(row)
+
     def transition(
         self,
         task_id: str,
@@ -209,6 +218,66 @@ class Repository:
                 (task_id,),
             ).fetchall()
         return [self._event(row) for row in rows]
+
+    def set_media(
+        self,
+        task_id: str,
+        *,
+        aweme_id: str,
+        output_dir: Path,
+        metadata: dict[str, object],
+    ) -> Task:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE tasks
+                SET aweme_id=?, output_dir=?, metadata_json=?, updated_at=?
+                WHERE id=?
+                """,
+                (
+                    aweme_id,
+                    str(output_dir),
+                    json.dumps(metadata, ensure_ascii=False),
+                    _iso(self.clock()),
+                    task_id,
+                ),
+            )
+        return self.get_task(task_id)
+
+    def record_failure(
+        self,
+        task_id: str,
+        error: UserFacingError,
+        *,
+        lease_id: str | None = None,
+    ) -> Task:
+        now = _iso(self.clock())
+        with self.transaction(immediate=True) as connection:
+            row = connection.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+            if row is None:
+                raise KeyError(task_id)
+            current = TaskStatus(row["status"])
+            target = (
+                TaskStatus.PARTIAL
+                if current in {TaskStatus.AWAITING_TRANSCRIPTION, TaskStatus.TRANSCRIBING}
+                else TaskStatus.FAILED
+            )
+            require_transition(current, target)
+            if lease_id:
+                connection.execute("DELETE FROM transcription_leases WHERE id=?", (lease_id,))
+            connection.execute(
+                """
+                UPDATE tasks
+                SET status=?, message=?, error_code=?, error_message=?, updated_at=?
+                WHERE id=?
+                """,
+                (target.value, error.message, error.code, error.message, now, task_id),
+            )
+            connection.execute(
+                "INSERT INTO events(task_id, status, message, created_at) VALUES(?,?,?,?)",
+                (task_id, target.value, error.message, now),
+            )
+        return self.get_task(task_id)
 
     def set_setting(self, key: str, value: str) -> None:
         now = _iso(self.clock())
@@ -328,6 +397,38 @@ class Repository:
                     recovered += 1
                 connection.execute("DELETE FROM transcription_leases WHERE id=?", (row["id"],))
         return recovered
+
+    def complete_transcription(self, lease_id: str) -> Task:
+        now = _iso(self.clock())
+        with self.transaction(immediate=True) as connection:
+            lease = connection.execute(
+                "SELECT * FROM transcription_leases WHERE id=?",
+                (lease_id,),
+            ).fetchone()
+            if lease is None:
+                raise KeyError(lease_id)
+            task = connection.execute(
+                "SELECT * FROM tasks WHERE id=?",
+                (lease["task_id"],),
+            ).fetchone()
+            if task is None:
+                raise KeyError(lease["task_id"])
+            require_transition(TaskStatus(task["status"]), TaskStatus.COMPLETED)
+            connection.execute("DELETE FROM transcription_leases WHERE id=?", (lease_id,))
+            connection.execute(
+                """
+                UPDATE tasks
+                SET status=?, progress=100, message=?, error_code=NULL,
+                    error_message=NULL, updated_at=?
+                WHERE id=?
+                """,
+                (TaskStatus.COMPLETED.value, "处理完成", now, lease["task_id"]),
+            )
+            connection.execute(
+                "INSERT INTO events(task_id, status, message, created_at) VALUES(?,?,?,?)",
+                (lease["task_id"], TaskStatus.COMPLETED.value, "处理完成", now),
+            )
+        return self.get_task(str(lease["task_id"]))
 
     @staticmethod
     def _task(row: sqlite3.Row) -> Task:
