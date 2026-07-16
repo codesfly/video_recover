@@ -52,6 +52,13 @@ def test_up_script_builds_before_replacing_and_generates_token() -> None:
     assert "scripts/dev-check.sh" in script
 
 
+def test_health_script_waits_for_docker_health_not_only_http() -> None:
+    script = (ROOT / "scripts/dev-check.sh").read_text(encoding="utf-8")
+
+    loop = script[script.index("for attempt"):script.index("python3 - /tmp")]
+    assert '[[ "$CONTAINER_HEALTH" == "healthy" ]]' in loop
+
+
 def test_mcp_installer_covers_codex_and_claude_stdio() -> None:
     script = (ROOT / "scripts/install-mcp.sh").read_text(encoding="utf-8")
 

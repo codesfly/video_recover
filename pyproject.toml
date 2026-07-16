@@ -26,6 +26,7 @@ cpu = ["faster-whisper>=1.2,<2"]
 mac = ["mlx-whisper>=0.4,<1"]
 dev = [
   "httpx2>=2,<3",
+  "playwright>=1.55,<2",
   "pytest>=8.4,<9",
   "pytest-asyncio>=1.1,<2",
   "ruff>=0.12,<1",

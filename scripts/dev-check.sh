@@ -6,7 +6,13 @@ cd "$PROJECT_ROOT"
 
 for attempt in $(seq 1 40); do
   if curl --fail --silent --max-time 3 http://127.0.0.1:8787/healthz >/tmp/video-recover-health.json; then
-    break
+    CONTAINER_ID="$(docker compose ps -q app)"
+    if [[ -n "$CONTAINER_ID" ]]; then
+      CONTAINER_HEALTH="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER_ID")"
+      if [[ "$CONTAINER_HEALTH" == "healthy" ]]; then
+        break
+      fi
+    fi
   fi
   if [[ "$attempt" == "40" ]]; then
     echo "服务在等待时间内没有就绪。" >&2
@@ -48,13 +54,6 @@ name = payload.get("result", {}).get("serverInfo", {}).get("name")
 if name != "video-recover":
     raise SystemExit(f"unexpected MCP response: {payload!r}")
 PY
-
-CONTAINER_ID="$(docker compose ps -q app)"
-CONTAINER_HEALTH="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER_ID")"
-if [[ "$CONTAINER_HEALTH" != "healthy" && "$CONTAINER_HEALTH" != "running" ]]; then
-  echo "容器状态异常：$CONTAINER_HEALTH" >&2
-  exit 1
-fi
 
 if docker compose logs --no-color --tail=200 app | grep -Eqi 'traceback|panic|worker_token|sessionid='; then
   echo "容器日志中发现异常堆栈或疑似敏感字段。" >&2
