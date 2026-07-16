@@ -34,7 +34,7 @@ def build_mcp(service: VideoService) -> FastMCP:
             "Video downloads and transcription are asynchronous. Call submit_video, "
             "then poll get_task until completed or partial before reading artifacts."
         ),
-        streamable_http_path="/",
+        streamable_http_path="/mcp",
         stateless_http=True,
         json_response=True,
         transport_security=TransportSecuritySettings(

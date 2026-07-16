@@ -111,7 +111,7 @@ def test_streamable_http_mcp_is_mounted_on_app(tmp_path: Path) -> None:
 
     with TestClient(app) as client:
         response = client.post(
-            "/mcp/",
+            "/mcp",
             headers={
                 "Accept": "application/json, text/event-stream",
                 "Content-Type": "application/json",

@@ -51,7 +51,7 @@ def fake_downloader(_media, target, **_options):
     return target
 
 
-def make_context(tmp_path, *, parser=None, transcriber=None):
+def make_context(tmp_path, *, parser=None, transcriber=None, native_grace_seconds=0):
     settings = Settings(data_dir=tmp_path / "data")
     settings.ensure_directories()
     repository = Repository(settings.database_path)
@@ -66,6 +66,7 @@ def make_context(tmp_path, *, parser=None, transcriber=None):
         downloader=fake_downloader,
         cpu_transcriber=transcriber,
         allow_cpu_fallback=transcriber is not None,
+        native_worker_grace_seconds=native_grace_seconds,
     )
     return service, repository, runner
 
@@ -96,6 +97,20 @@ def test_cpu_transcription_completes_artifacts(tmp_path):
     assert saved.status == TaskStatus.COMPLETED
     assert saved.output_dir is not None
     assert "识别出的文案" in (saved.output_dir / "transcript.txt").read_text(encoding="utf-8")
+
+
+def test_cpu_fallback_waits_for_native_worker_grace_period(tmp_path):
+    service, repository, runner = make_context(
+        tmp_path,
+        transcriber=StubTranscriber(),
+        native_grace_seconds=300,
+    )
+    task, _ = service.submit(TEST_URL)
+
+    assert runner.run_once() is True
+    assert runner.run_once() is False
+
+    assert repository.get_task(task.id).status == TaskStatus.AWAITING_TRANSCRIPTION
 
 
 def test_transcription_failure_preserves_video_and_marks_partial(tmp_path):

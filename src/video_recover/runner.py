@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
+from datetime import datetime
 
 from video_recover.domain import TaskStatus
 from video_recover.downloader import download_file
@@ -18,6 +20,8 @@ class JobRunner:
         downloader: DownloadFunction = download_file,
         cpu_transcriber: Transcriber | None = None,
         allow_cpu_fallback: bool = False,
+        native_worker_grace_seconds: int = 300,
+        clock: Callable[[], datetime] | None = None,
         poll_seconds: float = 1.0,
     ) -> None:
         self.service = service
@@ -25,6 +29,8 @@ class JobRunner:
         self.downloader = downloader
         self.cpu_transcriber = cpu_transcriber
         self.allow_cpu_fallback = allow_cpu_fallback
+        self.native_worker_grace_seconds = native_worker_grace_seconds
+        self.clock = clock or self.repository.clock
         self.poll_seconds = poll_seconds
         self.logger = logging.getLogger(__name__)
         self._stop = threading.Event()
@@ -43,6 +49,12 @@ class JobRunner:
             return True
 
         if not self.allow_cpu_fallback or self.cpu_transcriber is None:
+            return False
+        candidate = self.repository.next_task(TaskStatus.AWAITING_TRANSCRIPTION)
+        if candidate is None:
+            return False
+        waiting_seconds = (self.clock() - candidate.updated_at).total_seconds()
+        if waiting_seconds < self.native_worker_grace_seconds:
             return False
         lease = self.repository.acquire_transcription_lease(
             "container-cpu",

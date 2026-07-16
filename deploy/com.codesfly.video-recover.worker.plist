@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.codesfly.video-recover.worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__WORKER_EXECUTABLE__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>VIDEO_RECOVER_CONTROL_URL</key>
+    <string>http://127.0.0.1:8787</string>
+    <key>VIDEO_RECOVER_DATA_DIR</key>
+    <string>__DATA_DIR__</string>
+    <key>VIDEO_RECOVER_WORKER_TOKEN</key>
+    <string>__WORKER_TOKEN__</string>
+    <key>VIDEO_RECOVER_MODEL_IDLE_SECONDS</key>
+    <string>600</string>
+    <key>HF_HOME</key>
+    <string>__MODEL_DIR__</string>
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>__PROJECT_DIR__</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+  <key>Nice</key>
+  <integer>5</integer>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/worker.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/worker.error.log</string>
+</dict>
+</plist>

@@ -75,6 +75,7 @@ def create_app(
             video_service,
             cpu_transcriber=CpuTranscriber(),
             allow_cpu_fallback=config.cpu_fallback_enabled,
+            native_worker_grace_seconds=config.native_worker_timeout_seconds,
         )
     app = FastAPI(
         title="VideoRecover",
@@ -84,15 +85,16 @@ def create_app(
     app.state.settings = config
     app.state.video_service = video_service
     app.state.mcp = mcp
-    app.include_router(build_router(video_service, config))
-    app.include_router(build_web_router())
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    app.mount("/mcp", mcp_http_app)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         probe_sqlite(config.database_path)
         return {"status": "ok", "storage": "ok"}
+
+    app.include_router(build_router(video_service, config))
+    app.include_router(build_web_router())
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/", mcp_http_app)
 
     return app
 

@@ -1,0 +1,37 @@
+name: video-recover
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: video-recover:local
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      VIDEO_RECOVER_DATA_DIR: /data
+      VIDEO_RECOVER_HOST: 0.0.0.0
+      VIDEO_RECOVER_PORT: "8787"
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - "${VIDEO_RECOVER_DATA_DIR}:/data"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8787/healthz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    stop_grace_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
