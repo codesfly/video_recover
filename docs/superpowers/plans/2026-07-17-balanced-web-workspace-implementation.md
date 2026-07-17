@@ -24,7 +24,7 @@
 - Modify: `tests/integration/test_web.py`
 - Modify: `tests/e2e/test_web_ui.py`
 
-- [ ] **Step 1: Replace the page structure assertions**
+- [x] **Step 1: Replace the page structure assertions**
 
 Replace `test_archive_page_has_accessible_controls_and_empty_state` with:
 
@@ -49,7 +49,7 @@ def test_archive_page_has_compact_workspace_and_accessible_controls(tmp_path: Pa
     assert "EXPORT / 导出产物" not in response.text
 ```
 
-- [ ] **Step 2: Extend the asset contract for the balanced layout**
+- [x] **Step 2: Extend the asset contract for the balanced layout**
 
 Add these assertions after the existing reduced-motion/container checks:
 
@@ -60,7 +60,7 @@ Add these assertions after the existing reduced-motion/container checks:
     assert ".task-index" not in stylesheet.text
 ```
 
-- [ ] **Step 3: Update the browser flow to the new hierarchy**
+- [x] **Step 3: Update the browser flow to the new hierarchy**
 
 In `test_desktop_submit_and_mobile_layout_have_no_browser_errors`, replace the old heading and numbered-task assertions and add compactness/settings checks:
 
@@ -93,7 +93,7 @@ In `test_desktop_submit_and_mobile_layout_have_no_browser_errors`, replace the o
                 assert console_errors == []
 ```
 
-- [ ] **Step 4: Run the focused tests and confirm the new contract fails**
+- [x] **Step 4: Run the focused tests and confirm the new contract fails**
 
 Run:
 
@@ -109,7 +109,7 @@ Expected: integration and browser assertions fail because the page still contain
 - Modify: `src/video_recover/templates/index.html`
 - Modify: `src/video_recover/static/app.js`
 
-- [ ] **Step 1: Replace the masthead and capture hero**
+- [x] **Step 1: Replace the masthead and capture hero**
 
 Use a compact `.masthead` containing the existing wordmark IDs, `#service-indicator`, and a native `.settings-sheet`. Move the existing `#cookie-form`, `#douyin-cookie`, `#cookie-badge`, and `#cookie-message` into the settings disclosure. Replace `.capture-strip` with:
 
@@ -133,11 +133,11 @@ Use a compact `.masthead` containing the existing wordmark IDs, `#service-indica
 </section>
 ```
 
-- [ ] **Step 2: Replace the archive rail headings and empty state**
+- [x] **Step 2: Replace the archive rail headings and empty state**
 
 Keep `#task-list`, `#task-count`, and `#list-empty`, but use `aria-label="最近任务"`, the visible heading `最近任务`, and one compact empty action labeled `解析第一条抖音视频`.
 
-- [ ] **Step 3: Integrate status and secondary actions into the detail header**
+- [x] **Step 3: Integrate status and secondary actions into the detail header**
 
 Move `#task-status`, `#status-message`, and `#status-progress` into `.record-header`. Put `#retry-button` and `#delete-button` inside:
 
@@ -153,11 +153,11 @@ Move `#task-status`, `#status-message`, and `#status-progress` into `.record-hea
 
 Move `.artifact-section` below `.record-grid`, rename its visible heading to `下载文件`, and retain all six `data-artifact` links.
 
-- [ ] **Step 4: Simplify the empty state and footer**
+- [x] **Step 4: Simplify the empty state and footer**
 
 Use a single heading `还没有归档视频`, one explanatory sentence, and the `解析第一条抖音视频` focus action. Combine the footer content into one line without removing the version or local/MCP message.
 
-- [ ] **Step 5: Remove decorative task numbering from JavaScript**
+- [x] **Step 5: Remove decorative task numbering from JavaScript**
 
 Replace `createTaskItem` and its caller with:
 
@@ -207,11 +207,11 @@ Replace `createTaskItem` and its caller with:
 **Files:**
 - Modify: `src/video_recover/static/app.css`
 
-- [ ] **Step 1: Reduce the design tokens and global chrome**
+- [x] **Step 1: Reduce the design tokens and global chrome**
 
 Keep the existing paper, ink, vermilion, success, display-font, and body-font tokens. Remove `--text-display`, large hero spacing, the background grid, decorative stamp styles, and task-index rules. Keep visible focus styles and `[hidden]` behavior.
 
-- [ ] **Step 2: Implement the desktop workspace**
+- [x] **Step 2: Implement the desktop workspace**
 
 Use these governing layout rules:
 
@@ -240,15 +240,15 @@ Use these governing layout rules:
 
 Style the selected task with a vermilion left edge plus a subtle surface fill. Keep the record title below `clamp(1.5rem, 3vw, 2.5rem)`. Limit the video to a practical desktop height and reduce gaps between copy sections.
 
-- [ ] **Step 3: Make exports and settings compact**
+- [x] **Step 3: Make exports and settings compact**
 
 Render `.artifact-links` as a wrapping row of six text links separated by subtle rules. Position `.settings-sheet` as a desktop dropdown anchored to the masthead, and make `.record-menu-panel` a small anchored action surface.
 
-- [ ] **Step 4: Add mobile reflow and motion safeguards**
+- [x] **Step 4: Add mobile reflow and motion safeguards**
 
 Below `48rem`, stack the capture bar, archive rail, and record content; keep all controls at least 44px high and ensure long URLs/titles wrap or truncate without widening the document. Preserve the existing `@media (prefers-reduced-motion: reduce)` rule.
 
-- [ ] **Step 5: Run focused tests and lint until green**
+- [x] **Step 5: Run focused tests and lint until green**
 
 Run:
 
@@ -259,7 +259,7 @@ Run:
 
 Expected: all focused tests pass and Ruff reports `All checks passed!`.
 
-- [ ] **Step 6: Commit the tested implementation**
+- [x] **Step 6: Commit the tested implementation**
 
 ```bash
 git add src/video_recover/templates/index.html src/video_recover/static/app.css \
@@ -272,7 +272,7 @@ git commit -m "feat: simplify web archive workspace"
 **Files:**
 - Verify only; fix the files above if evidence reveals a defect.
 
-- [ ] **Step 1: Run the complete non-live suite**
+- [x] **Step 1: Run the complete non-live suite**
 
 Run:
 
@@ -282,7 +282,7 @@ Run:
 
 Expected: 92 tests pass and only the explicitly marked live test is deselected.
 
-- [ ] **Step 2: Rebuild and restart the local Docker service from the completed branch**
+- [x] **Step 2: Rebuild and restart the local Docker service from the completed branch**
 
 After the tested branch has been fast-forwarded into the primary workspace, run from the primary workspace so its existing `.env` and data volume remain authoritative:
 
@@ -292,15 +292,15 @@ bash scripts/dev-up.sh
 
 Expected: the script reports `健康检查、Web、MCP 与容器状态均正常。`.
 
-- [ ] **Step 3: Inspect the real completed task at desktop width**
+- [x] **Step 3: Inspect the real completed task at desktop width**
 
 Verify the capture bar is compact; recent tasks and detail share the screen; video, original copy, transcript, and all six download links are visible; settings and delete are secondary; console error count is zero.
 
-- [ ] **Step 4: Inspect at 390×844**
+- [x] **Step 4: Inspect at 390×844**
 
 Verify document `scrollWidth === clientWidth`, controls reflow, and every retained content section remains reachable.
 
-- [ ] **Step 5: Review the final diff and requirements**
+- [x] **Step 5: Review the final diff and requirements**
 
 Run:
 
