@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -50,6 +51,9 @@ def test_archive_page_has_compact_workspace_and_accessible_controls(tmp_path: Pa
     assert "NEW ARCHIVE" not in response.text
     assert "YOUR LOCAL COLLECTION" not in response.text
     assert "EXPORT / 导出产物" not in response.text
+    asset_version = re.search(r'/static/app\.css\?v=([0-9a-f]{12})', response.text)
+    assert asset_version is not None
+    assert f'/static/app.js?v={asset_version.group(1)}' in response.text
 
 
 def test_frontend_assets_are_served_and_api_remains_available(tmp_path: Path) -> None:
