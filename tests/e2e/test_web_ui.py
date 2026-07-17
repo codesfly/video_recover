@@ -74,24 +74,29 @@ def test_desktop_submit_and_mobile_layout_have_no_browser_errors(tmp_path: Path)
                 page.goto(f"http://127.0.0.1:{port}/", wait_until="domcontentloaded")
                 assert page.get_by_role(
                     "heading",
-                    name="收下一条视频，留住它的声音。",
+                    name="解析一条抖音视频",
                 ).is_visible()
+                capture_box = page.locator(".capture-bar").bounding_box()
+                assert capture_box is not None
+                assert capture_box["height"] < 190
                 page.get_by_label("抖音视频链接").fill(TEST_URL)
                 page.get_by_role("button", name="开始归档").click()
                 page.get_by_role(
                     "button",
-                    name="01 待解析视频 7662212894569811235",
+                    name="待解析视频 7662212894569811235",
                 ).wait_for()
                 assert page.get_by_text("已入队，后台会自动处理。").is_visible()
+
+                page.get_by_text("设置", exact=True).click()
+                cookie_input = page.get_by_label("Cookie")
+                assert cookie_input.get_attribute("type") == "password"
+                assert cookie_input.input_value() == ""
 
                 page.set_viewport_size({"width": 390, "height": 844})
                 assert page.evaluate(
                     "document.documentElement.scrollWidth "
                     "=== document.documentElement.clientWidth"
                 )
-                cookie_input = page.get_by_label("Cookie")
-                assert cookie_input.get_attribute("type") == "password"
-                assert cookie_input.input_value() == ""
                 assert console_errors == []
             finally:
                 browser.close()

@@ -32,17 +32,24 @@ def make_client(tmp_path: Path) -> TestClient:
     return TestClient(create_app(settings, service=service, start_runner=False))
 
 
-def test_archive_page_has_accessible_controls_and_empty_state(tmp_path: Path) -> None:
+def test_archive_page_has_compact_workspace_and_accessible_controls(tmp_path: Path) -> None:
     client = make_client(tmp_path)
 
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "本地媒体档案台" in response.text
+    assert "VideoRecover" in response.text
+    assert 'class="capture-bar"' in response.text
+    assert 'aria-label="最近任务"' in response.text
+    assert 'class="record-menu"' in response.text
     assert 'for="video-url"' in response.text
     assert 'id="task-status"' in response.text
     assert 'aria-live="polite"' in response.text
-    assert "归档第一条抖音视频" in response.text
+    assert "解析第一条抖音视频" in response.text
+    assert "下载文件" in response.text
+    assert "NEW ARCHIVE" not in response.text
+    assert "YOUR LOCAL COLLECTION" not in response.text
+    assert "EXPORT / 导出产物" not in response.text
 
 
 def test_frontend_assets_are_served_and_api_remains_available(tmp_path: Path) -> None:
@@ -54,6 +61,10 @@ def test_frontend_assets_are_served_and_api_remains_available(tmp_path: Path) ->
     assert stylesheet.status_code == 200
     assert "prefers-reduced-motion" in stylesheet.text
     assert "@container" in stylesheet.text
+    assert ".capture-bar" in stylesheet.text
+    assert ".archive-layout" in stylesheet.text
+    assert ".record-menu" in stylesheet.text
+    assert ".task-index" not in stylesheet.text
     assert script.status_code == 200
     assert "AbortController" in script.text
     assert client.get("/api/status").status_code == 200

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f2ede1">
   <meta name="description" content="在本机归档抖音视频、发布文案与语音转写。">
-  <title>本地媒体档案台 · VideoRecover</title>
+  <title>VideoRecover · 本地媒体档案</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
@@ -17,119 +17,116 @@
     <a class="wordmark" href="/" aria-label="VideoRecover 首页">
       <span class="wordmark-seal" aria-hidden="true">录</span>
       <span>
-        <strong>本地媒体档案台</strong>
-        <small>VIDEO RECOVER · MAC ARCHIVE</small>
+        <strong>VideoRecover</strong>
+        <small>本地媒体档案</small>
       </span>
     </a>
-    <div class="service-indicator" id="service-indicator">
-      <span class="signal" aria-hidden="true"></span>
-      <span id="service-label">正在连接本地服务</span>
+
+    <div class="header-actions">
+      <div class="service-indicator" id="service-indicator">
+        <span class="signal" aria-hidden="true"></span>
+        <span id="service-label">正在连接本地服务</span>
+      </div>
+
+      <details class="settings-sheet">
+        <summary>
+          <span>设置</span>
+          <span id="cookie-badge" class="credential-state">未设置</span>
+        </summary>
+        <form id="cookie-form" class="cookie-form">
+          <h2>抖音访问凭据</h2>
+          <label for="douyin-cookie">Cookie</label>
+          <input
+            id="douyin-cookie"
+            name="cookie"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="仅当公开视频要求登录时粘贴"
+            required
+          >
+          <p>加密保存在这台 Mac，本页面不会再次显示 Cookie 内容。</p>
+          <button class="button button-primary" type="submit">保存访问凭据</button>
+          <span id="cookie-message" class="form-message" role="status"></span>
+        </form>
+      </details>
     </div>
   </header>
 
   <main id="main-content">
-    <section class="capture-strip" aria-labelledby="capture-title">
+    <section class="capture-bar" aria-labelledby="capture-title">
       <div class="capture-heading">
-        <p class="eyebrow">NEW ARCHIVE / 新建归档</p>
-        <h1 id="capture-title">收下一条视频，<em>留住它的声音。</em></h1>
+        <p>新建归档</p>
+        <h1 id="capture-title">解析一条抖音视频</h1>
       </div>
       <form id="submit-form" class="capture-form">
-        <label for="video-url">抖音视频链接</label>
-        <div class="url-row">
-          <input
-            id="video-url"
-            name="url"
-            type="url"
-            inputmode="url"
-            autocomplete="url"
-            spellcheck="false"
-            placeholder="https://www.douyin.com/video/..."
-            required
-          >
-          <button class="button button-primary" id="submit-button" type="submit">
-            <span>开始归档</span><span aria-hidden="true">↘</span>
-          </button>
-        </div>
-        <div class="form-foot">
-          <label class="check-control">
-            <input id="transcribe" name="transcribe" type="checkbox" checked>
-            <span>提取视频语音文案</span>
-          </label>
-          <p id="submit-message" class="form-message" role="status"></p>
-        </div>
+        <label class="sr-only" for="video-url">抖音视频链接</label>
+        <input
+          id="video-url"
+          name="url"
+          type="url"
+          inputmode="url"
+          autocomplete="url"
+          spellcheck="false"
+          placeholder="粘贴抖音视频链接"
+          required
+        >
+        <label class="check-control">
+          <input id="transcribe" name="transcribe" type="checkbox" checked>
+          <span>提取语音</span>
+        </label>
+        <button class="button button-primary" id="submit-button" type="submit">开始归档</button>
+        <p id="submit-message" class="form-message" role="status" aria-live="polite"></p>
       </form>
     </section>
 
     <div class="archive-layout">
       <aside class="archive-rail" aria-labelledby="archive-title">
         <div class="rail-heading">
-          <div>
-            <p class="eyebrow">INDEX / 索引</p>
-            <h2 id="archive-title">归档簿</h2>
-          </div>
+          <h2 id="archive-title">最近任务</h2>
           <span id="task-count" class="count-mark" aria-label="任务数量">0</span>
         </div>
 
-        <nav aria-label="视频归档列表">
+        <nav aria-label="最近任务">
           <ol id="task-list" class="task-list"></ol>
         </nav>
 
         <div id="list-empty" class="rail-empty">
-          <span class="folio" aria-hidden="true">01</span>
-          <p>还没有馆藏。</p>
-          <button class="text-action" type="button" data-focus-url>归档第一条抖音视频 →</button>
+          <p>还没有任务。</p>
+          <button class="text-action" type="button" data-focus-url>解析第一条抖音视频</button>
         </div>
-
-        <details class="settings-sheet">
-          <summary>
-            <span>抖音访问凭据</span>
-            <span id="cookie-badge" class="credential-state">未设置</span>
-          </summary>
-          <form id="cookie-form" class="cookie-form">
-            <label for="douyin-cookie">Cookie</label>
-            <input
-              id="douyin-cookie"
-              name="cookie"
-              type="password"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="仅当公开视频要求登录时粘贴"
-              required
-            >
-            <p>加密保存在这台 Mac，本页面不会再次显示 Cookie 内容。</p>
-            <button class="button button-quiet" type="submit">保存访问凭据</button>
-            <span id="cookie-message" class="form-message" role="status"></span>
-          </form>
-        </details>
       </aside>
 
-      <section class="record-stage" aria-labelledby="record-title">
-        <div id="task-status" class="status-ribbon" aria-live="polite">
-          <span class="status-rule" aria-hidden="true"></span>
-          <span id="status-message">等待选择馆藏</span>
-          <span id="status-progress" class="tabular">—</span>
-        </div>
-
+      <section class="record-stage" aria-label="任务详情">
         <div id="record-empty" class="record-empty">
-          <div class="empty-stamp" aria-hidden="true">待<br>归<br>档</div>
           <div>
-            <p class="eyebrow">YOUR LOCAL COLLECTION</p>
-            <h2>视频、原文与语音，<br>都留在你的 Mac。</h2>
-            <p>粘贴公开抖音链接。任务完成后，可直接播放视频，复制文案，并下载 TXT、SRT 或 Markdown。</p>
-            <button class="button button-primary" type="button" data-focus-url>归档第一条抖音视频</button>
+            <h2>还没有归档视频</h2>
+            <p>粘贴抖音链接，即可保存视频、发布原文和语音文案。</p>
+            <button class="button button-primary" type="button" data-focus-url>解析第一条抖音视频</button>
           </div>
         </div>
 
         <article id="record-detail" class="record-detail" hidden>
           <header class="record-header">
-            <div>
-              <p class="eyebrow" id="record-number">ARCHIVE —</p>
-              <h2 id="record-title">视频档案</h2>
-              <p id="record-author" class="record-byline">等待解析作者</p>
+            <div id="task-status" class="status-ribbon" aria-live="polite">
+              <span class="status-rule" aria-hidden="true"></span>
+              <span id="status-message">等待选择任务</span>
+              <span id="status-progress" class="tabular">—</span>
             </div>
-            <div class="record-actions">
-              <button class="button button-quiet" id="retry-button" type="button" hidden>重新处理</button>
-              <button class="button button-danger" id="delete-button" type="button">删除馆藏</button>
+
+            <div class="record-title-row">
+              <div>
+                <p class="record-number" id="record-number">档案 —</p>
+                <h2 id="record-title">视频档案</h2>
+                <p id="record-author" class="record-byline">等待解析作者</p>
+              </div>
+              <details class="record-menu">
+                <summary class="button button-quiet">更多</summary>
+                <div class="record-menu-panel">
+                  <button class="text-action" id="retry-button" type="button" hidden>重新处理</button>
+                  <button class="text-action text-danger" id="delete-button" type="button">删除馆藏</button>
+                </div>
+              </details>
             </div>
           </header>
 
@@ -167,33 +164,30 @@
                 </div>
                 <pre id="transcript-text" class="transcript-body">等待原生 MLX Worker 转写。</pre>
               </section>
-
-              <section class="artifact-section" aria-labelledby="artifact-title">
-                <p class="eyebrow" id="artifact-title">EXPORT / 导出产物</p>
-                <div class="artifact-links">
-                  <a data-artifact="video" href="#">MP4 <span>视频</span></a>
-                  <a data-artifact="description" href="#">TXT <span>原文</span></a>
-                  <a data-artifact="transcript" href="#">TXT <span>语音</span></a>
-                  <a data-artifact="srt" href="#">SRT <span>字幕</span></a>
-                  <a data-artifact="markdown" href="#">MD <span>合集</span></a>
-                  <a data-artifact="metadata" href="#">JSON <span>元数据</span></a>
-                </div>
-              </section>
             </div>
           </div>
+
+          <section class="artifact-section" aria-labelledby="artifact-title">
+            <h3 id="artifact-title">下载文件</h3>
+            <div class="artifact-links">
+              <a data-artifact="video" href="#">MP4 <span>视频</span></a>
+              <a data-artifact="description" href="#">TXT <span>原文</span></a>
+              <a data-artifact="transcript" href="#">TXT <span>语音</span></a>
+              <a data-artifact="srt" href="#">SRT <span>字幕</span></a>
+              <a data-artifact="markdown" href="#">MD <span>合集</span></a>
+              <a data-artifact="metadata" href="#">JSON <span>元数据</span></a>
+            </div>
+          </section>
         </article>
       </section>
     </div>
   </main>
 
-  <footer class="footer">
-    <span>VideoRecover {{ app_version }}</span>
-    <span>文件留在本机 · MCP 可用</span>
-  </footer>
+  <footer class="footer">VideoRecover {{ app_version }} · 文件留在本机 · MCP 可用</footer>
 
   <dialog id="delete-dialog" class="delete-dialog">
     <form method="dialog">
-      <p class="eyebrow">IRREVERSIBLE / 不可撤销</p>
+      <p class="eyebrow">不可撤销</p>
       <h2>删除这份本地馆藏？</h2>
       <p>视频、发布原文、语音文案和字幕文件都会从本机永久删除。</p>
       <div class="dialog-actions">

@@ -125,7 +125,7 @@
     return `待解析视频 ${parts.at(-1) || ""}`;
   }
 
-  function createTaskItem(task, index) {
+  function createTaskItem(task) {
     const item = document.createElement("li");
     item.className = "task-item";
 
@@ -135,10 +135,6 @@
     button.dataset.taskId = task.id;
     button.dataset.complete = String(task.status === "completed");
     button.setAttribute("aria-current", String(task.id === state.selectedId));
-
-    const number = document.createElement("span");
-    number.className = "task-index";
-    number.textContent = String(index + 1).padStart(2, "0");
 
     const copy = document.createElement("span");
     copy.className = "task-copy";
@@ -154,7 +150,7 @@
     mark.className = "task-status-mark";
     mark.setAttribute("aria-hidden", "true");
 
-    button.append(number, copy, mark);
+    button.append(copy, mark);
     button.addEventListener("click", () => selectTask(task.id));
     item.append(button);
     return item;
@@ -162,7 +158,7 @@
 
   function renderTaskList() {
     const fragment = document.createDocumentFragment();
-    state.tasks.forEach((task, index) => fragment.append(createTaskItem(task, index)));
+    state.tasks.forEach((task) => fragment.append(createTaskItem(task)));
     elements.taskList.replaceChildren(fragment);
     elements.taskCount.textContent = String(state.tasks.length);
     elements.listEmpty.hidden = state.tasks.length > 0;
@@ -253,7 +249,7 @@
     elements.statusRibbon.classList.toggle("is-active", active);
     elements.statusMessage.textContent = task.error_message || task.message;
     elements.statusProgress.textContent = `${task.progress}%`;
-    elements.recordNumber.textContent = `ARCHIVE · ${(task.aweme_id || task.id).slice(-8)}`;
+    elements.recordNumber.textContent = `档案 · ${(task.aweme_id || task.id).slice(-8)}`;
     elements.recordTitle.textContent = titleFor(task);
     elements.recordAuthor.textContent = "等待解析作者";
     elements.factId.textContent = task.aweme_id || "解析中";
