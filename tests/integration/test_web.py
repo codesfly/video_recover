@@ -48,6 +48,9 @@ def test_archive_page_has_compact_workspace_and_accessible_controls(tmp_path: Pa
     assert 'aria-live="polite"' in response.text
     assert "解析第一条抖音视频" in response.text
     assert "下载文件" in response.text
+    assert "自动完成匿名解析" in response.text
+    assert 'id="cookie-form"' not in response.text
+    assert 'for="douyin-cookie"' not in response.text
     assert "NEW ARCHIVE" not in response.text
     assert "YOUR LOCAL COLLECTION" not in response.text
     assert "EXPORT / 导出产物" not in response.text

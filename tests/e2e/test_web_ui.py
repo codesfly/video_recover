@@ -87,10 +87,8 @@ def test_desktop_submit_and_mobile_layout_have_no_browser_errors(tmp_path: Path)
                 ).wait_for()
                 assert page.get_by_text("已入队，后台会自动处理。").is_visible()
 
-                page.get_by_text("设置", exact=True).click()
-                cookie_input = page.get_by_label("Cookie")
-                assert cookie_input.get_attribute("type") == "password"
-                assert cookie_input.input_value() == ""
+                assert page.get_by_text("自动完成匿名解析", exact=False).is_visible()
+                assert page.get_by_label("Cookie").count() == 0
 
                 page.set_viewport_size({"width": 390, "height": 844})
                 assert page.evaluate(

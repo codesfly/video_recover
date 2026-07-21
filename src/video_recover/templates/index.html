@@ -27,29 +27,6 @@
         <span class="signal" aria-hidden="true"></span>
         <span id="service-label">正在连接本地服务</span>
       </div>
-
-      <details class="settings-sheet">
-        <summary>
-          <span>设置</span>
-          <span id="cookie-badge" class="credential-state">未设置</span>
-        </summary>
-        <form id="cookie-form" class="cookie-form">
-          <h2>抖音访问凭据</h2>
-          <label for="douyin-cookie">Cookie</label>
-          <input
-            id="douyin-cookie"
-            name="cookie"
-            type="password"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="仅当公开视频要求登录时粘贴"
-            required
-          >
-          <p>加密保存在这台 Mac，本页面不会再次显示 Cookie 内容。</p>
-          <button class="button button-primary" type="submit">保存访问凭据</button>
-          <span id="cookie-message" class="form-message" role="status"></span>
-        </form>
-      </details>
     </div>
   </header>
 
@@ -58,6 +35,7 @@
       <div class="capture-heading">
         <p>新建归档</p>
         <h1 id="capture-title">解析一条抖音视频</h1>
+        <small>自动完成匿名解析并获取 CDN 地址</small>
       </div>
       <form id="submit-form" class="capture-form">
         <label class="sr-only" for="video-url">抖音视频链接</label>

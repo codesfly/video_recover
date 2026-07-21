@@ -94,20 +94,20 @@ tail -f ~/Library/Logs/VideoRecover/worker.error.log
 
 同一规范化视频链接会复用已有任务，避免重复下载。
 
-### 页面要求 Cookie 时
+### 匿名解析与 CDN 下载
 
-某些公开视频也会被抖音要求登录。请在已登录的浏览器中打开该视频，用开发者工具查看发往 `www.douyin.com` 的请求，在 Request Headers 中复制完整 `Cookie` 值，然后粘贴到管理台“抖音访问凭据”。
+服务先尝试轻量解析；当抖音只返回浏览器校验页面时，会临时启动容器内的匿名 Chromium，自动完成页面校验、读取视频详情并提取 `douyinvod.com`、`zjcdn.com` 等 CDN 地址。随后由普通 HTTP 下载器直接保存视频。
 
-- 不要截图 Cookie，不要发到聊天或提交到 Git。
-- Cookie 使用 Fernet 加密后写入 SQLite；密钥文件权限为 `0600`。
-- API 和 Web 永远不会回显 Cookie 明文。
-- 保存后重试原任务即可。
+- 不读取宿主机 Chrome 数据，也不需要用户提供账号 Cookie。
+- 匿名浏览器只在轻量解析失败时启动，且会拦截图片、字体和页面视频流。
+- 每次解析完成后立即关闭浏览器，不常驻占用 CPU 和内存。
+- CDN 下载仍受域名白名单、文件大小和剩余磁盘空间限制。
 
 ### Agent 使用登录态 Chrome 时
 
 浏览器自动化必须遵守凭据边界：Agent 可以确认登录状态、读取当前页面可见的作者/描述，以及下载页面已经加载的媒体，但不能读取或导出 Chrome Cookie、Local Storage、密码或会话文件。
 
-如果 Agent 能把当前页面媒体保存到宿主机的 `data/browser-capture/`，可用容器内的安全导入命令接管任务。导入器只接受该目录中的非空文件，拒绝任意本机路径，并会复用原先 `cookie_required` / `partial` 任务：
+如果匿名解析因验证码或平台变化暂时失败，而 Agent 能把当前页面媒体保存到宿主机的 `data/browser-capture/`，可用容器内的安全导入命令接管任务。导入器只接受该目录中的非空文件，拒绝任意本机路径，并会复用原先失败或部分完成的任务：
 
 ```bash
 docker compose exec -T app video-recover-import \
@@ -169,7 +169,7 @@ Claude Desktop 使用本地 stdio：安装脚本会备份并合并
 - `retry_task`
 - `get_service_status`
 
-Cookie 写入和删除馆藏不会暴露给 Agent，只能由 Web/REST 完成。
+匿名浏览器的临时会话不会暴露给 Agent；删除馆藏也不会通过 MCP 开放。
 
 ## 性能与资源
 
@@ -220,11 +220,11 @@ docker compose start app
 
 | 现象 | 原因与处理 |
 |---|---|
-| 提示需要 Cookie | 在 Web 中更新 Cookie，再对失败任务点“重新处理”。 |
+| 旧任务显示 `cookie_required` | 更新并重建镜像后点击“重新处理”；新解析器会自动建立匿名临时会话。 |
 | `parser_changed` | 抖音页面结构可能更新；先更新项目和镜像，仍失败再提交脱敏问题。 |
 | Web 显示等待 MLX Worker | 运行安装脚本，检查 `launchctl print` 和 Worker 日志；确认 Docker 已启动。 |
 | 首次转写长时间无进度 | 通常在下载模型；检查 Worker 日志、网络和模型目录剩余空间。 |
-| Agent 不能读取 Chrome Cookie | 这是凭据安全边界；在 Web 手动保存 Cookie，或让 Agent 将已加载媒体保存到 `data/browser-capture/` 后使用安全导入命令。 |
+| 匿名解析遇到验证码 | 稍后重试；必要时让 Agent 将已加载媒体保存到 `data/browser-capture/` 后使用安全导入命令。 |
 | 磁盘空间不足 | 清理其他文件或安全删除不需要的馆藏；系统会在低于保留阈值时停止下载。 |
 | Docker 占用持续偏高 | 保持 CPU 回退关闭；在 Docker Desktop 中检查是否有其他容器运行。 |
 | MCP 连接失败 | 先运行 `./scripts/dev-check.sh`；Codex URL 必须是 `/mcp`，Claude Desktop 配置后需重启。 |

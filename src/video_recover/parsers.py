@@ -68,9 +68,12 @@ class ParserChain:
                 errors.append(exc)
             except Exception:
                 errors.append(ParserChanged())
-        cookie_error = next((error for error in errors if isinstance(error, CookieRequired)), None)
-        if cookie_error is not None:
-            raise cookie_error
+        parser_error = next(
+            (error for error in reversed(errors) if not isinstance(error, CookieRequired)),
+            None,
+        )
+        if parser_error is not None:
+            raise parser_error
         raise errors[-1] if errors else ParserChanged()
 
 

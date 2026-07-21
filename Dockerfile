@@ -18,10 +18,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    VIDEO_RECOVER_DATA_DIR=/data
+    VIDEO_RECOVER_DATA_DIR=/data \
+    VIDEO_RECOVER_BROWSER_EXECUTABLE=/usr/bin/chromium
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg \
+    && apt-get install -y --no-install-recommends ca-certificates chromium curl ffmpeg \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 --shell /usr/sbin/nologin app \
     && mkdir -p /data \

@@ -52,10 +52,6 @@
     statusProgress: document.querySelector("#status-progress"),
     serviceIndicator: document.querySelector("#service-indicator"),
     serviceLabel: document.querySelector("#service-label"),
-    cookieForm: document.querySelector("#cookie-form"),
-    cookieInput: document.querySelector("#douyin-cookie"),
-    cookieBadge: document.querySelector("#cookie-badge"),
-    cookieMessage: document.querySelector("#cookie-message"),
     recordNumber: document.querySelector("#record-number"),
     recordTitle: document.querySelector("#record-title"),
     recordAuthor: document.querySelector("#record-author"),
@@ -169,7 +165,6 @@
     elements.serviceLabel.textContent = status.worker?.connected
       ? "本地服务在线 · MLX Worker 就绪"
       : "本地服务在线 · 等待 MLX Worker";
-    elements.cookieBadge.textContent = status.cookie.configured ? "已加密保存" : "未设置";
   }
 
   function setDisconnected() {
@@ -317,30 +312,9 @@
       showToast("馆藏任务已建立");
       await refreshNow();
     } catch (error) {
-      elements.submitMessage.textContent = `${error.message} 请检查链接，或更新 Cookie 后重试。`;
+      elements.submitMessage.textContent = `${error.message} 请检查链接后重试。`;
     } finally {
       elements.submitButton.disabled = false;
-    }
-  }
-
-  async function saveCookie(event) {
-    event.preventDefault();
-    const button = elements.cookieForm.querySelector("button");
-    button.disabled = true;
-    elements.cookieMessage.textContent = "正在加密保存…";
-    try {
-      await api("/api/settings/cookie", {
-        method: "PUT",
-        body: JSON.stringify({ cookie: elements.cookieInput.value }),
-      });
-      elements.cookieInput.value = "";
-      elements.cookieBadge.textContent = "已加密保存";
-      elements.cookieMessage.textContent = "访问凭据已保存在本机。";
-      showToast("Cookie 已加密保存");
-    } catch (error) {
-      elements.cookieMessage.textContent = `${error.message} 请重新粘贴后保存。`;
-    } finally {
-      button.disabled = false;
     }
   }
 
@@ -408,7 +382,6 @@
 
   function bindEvents() {
     elements.submitForm.addEventListener("submit", submitVideo);
-    elements.cookieForm.addEventListener("submit", saveCookie);
     elements.retryButton.addEventListener("click", retrySelected);
     elements.deleteButton.addEventListener("click", () => elements.deleteDialog.showModal());
     elements.deleteDialog.addEventListener("close", () => {

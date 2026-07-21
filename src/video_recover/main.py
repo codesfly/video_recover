@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from video_recover.api import build_router
+from video_recover.browser_parser import AnonymousBrowserParser
 from video_recover.config import Settings
 from video_recover.crypto import CookieVault
 from video_recover.mcp_server import build_mcp
@@ -55,7 +56,7 @@ def build_service(settings: Settings) -> VideoService:
     return VideoService(
         settings=settings,
         repository=Repository(settings.database_path),
-        parser=ParserChain([YtDlpParser(), DouyinPageParser()]),
+        parser=ParserChain([YtDlpParser(), DouyinPageParser(), AnonymousBrowserParser()]),
         cookie_vault=CookieVault(settings.secret_key_path),
     )
 

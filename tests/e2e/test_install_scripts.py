@@ -8,6 +8,15 @@ import yaml
 ROOT = Path(__file__).parents[2]
 
 
+def test_runtime_image_includes_anonymous_browser_dependencies() -> None:
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    runtime_dependencies = pyproject.split("[project.optional-dependencies]", 1)[0]
+    assert '"playwright>=' in runtime_dependencies
+    assert "chromium" in dockerfile
+
+
 def test_compose_binds_only_loopback_and_persists_data() -> None:
     compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
     app = compose["services"]["app"]
