@@ -13,6 +13,7 @@ CANONICAL = f"https://www.douyin.com/video/{VIDEO_ID}"
     [
         CANONICAL,
         f"https://douyin.com/video/{VIDEO_ID}?previous_page=web_code_link",
+        f"https://www.iesdouyin.com/share/video/{VIDEO_ID}/?region=CN",
         f"复制这条链接 {CANONICAL} 打开抖音观看",
     ],
 )
@@ -43,6 +44,27 @@ def test_resolves_short_link_and_validates_each_redirect():
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         normalized = resolve_douyin_url("https://v.douyin.com/abc123/", client=client)
+
+    assert normalized.canonical_url == CANONICAL
+
+
+def test_resolves_short_link_from_full_share_text_via_iesdouyin_share_url():
+    share_text = (
+        "0.05 :4pm yTy:/ DeepSeek Harness深度解读 "
+        "https://v.douyin.com/xpZeHgc_NK4/ 复制此链接，打开Dou音搜索"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://v.douyin.com/xpZeHgc_NK4/"
+        return httpx.Response(
+            302,
+            headers={
+                "location": f"https://www.iesdouyin.com/share/video/{VIDEO_ID}/?region=CN"
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        normalized = resolve_douyin_url(share_text, client=client)
 
     assert normalized.canonical_url == CANONICAL
 

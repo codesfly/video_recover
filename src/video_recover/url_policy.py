@@ -14,12 +14,14 @@ ALLOWED_HOSTS = frozenset(
         "www.douyin.com",
         "v.douyin.com",
         "iesdouyin.com",
+        "www.iesdouyin.com",
         "v.iesdouyin.com",
     }
 )
 SHORT_HOSTS = frozenset({"v.douyin.com", "v.iesdouyin.com"})
 URL_PATTERN = re.compile(r"https?://[^\s<>]+", re.IGNORECASE)
 VIDEO_PATH_PATTERN = re.compile(r"^/video/(?P<aweme_id>\d{10,30})/?$")
+SHARE_VIDEO_PATH_PATTERN = re.compile(r"^/share/video/(?P<aweme_id>\d{10,30})/?$")
 TRAILING_PUNCTUATION = "，。！？；：,.!?;:）)]}〉》\"'"
 
 
@@ -53,9 +55,12 @@ def _validated_parts(value: str):
 def normalize_douyin_url(value: str) -> NormalizedDouyinUrl:
     candidate = _extract_candidate(value)
     parts, host = _validated_parts(candidate)
-    if host not in {"douyin.com", "www.douyin.com"}:
+    if host in {"douyin.com", "www.douyin.com"}:
+        match = VIDEO_PATH_PATTERN.fullmatch(parts.path)
+    elif host in {"iesdouyin.com", "www.iesdouyin.com"}:
+        match = SHARE_VIDEO_PATH_PATTERN.fullmatch(parts.path)
+    else:
         raise UnsafeUrl("短链接需要先安全解析")
-    match = VIDEO_PATH_PATTERN.fullmatch(parts.path)
     if not match:
         raise UnsafeUrl("链接不是有效的抖音视频地址")
     aweme_id = match.group("aweme_id")

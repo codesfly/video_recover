@@ -42,6 +42,23 @@ def test_create_task_deduplicates_canonical_url(repository):
     assert first.status == TaskStatus.QUEUED
 
 
+def test_resubmitting_downloaded_task_with_transcription_enabled_queues_transcription(
+    repository,
+):
+    task, _ = repository.create_or_get_task(TEST_URL, transcribe=False)
+    repository.transition(task.id, TaskStatus.RESOLVING, progress=5, message="解析")
+    repository.transition(task.id, TaskStatus.DOWNLOADING, progress=20, message="下载")
+    repository.transition(task.id, TaskStatus.COMPLETED, progress=100, message="下载完成")
+
+    upgraded, created = repository.create_or_get_task(TEST_URL, transcribe=True)
+
+    assert created is False
+    assert upgraded.id == task.id
+    assert upgraded.transcribe is True
+    assert upgraded.status == TaskStatus.AWAITING_TRANSCRIPTION
+    assert upgraded.progress == 60
+
+
 def test_task_persists_after_repository_reopens(tmp_path, clock):
     database_path = tmp_path / "video_recover.sqlite3"
     first_repository = Repository(database_path, clock=clock.now)

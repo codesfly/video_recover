@@ -44,6 +44,8 @@ def test_archive_page_has_compact_workspace_and_accessible_controls(tmp_path: Pa
     assert 'aria-label="最近任务"' in response.text
     assert 'class="record-menu"' in response.text
     assert 'for="video-url"' in response.text
+    assert 'id="video-url"' in response.text
+    assert 'type="text"' in response.text
     assert 'id="task-status"' in response.text
     assert 'aria-live="polite"' in response.text
     assert "解析第一条抖音视频" in response.text

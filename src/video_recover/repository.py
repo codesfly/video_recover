@@ -132,6 +132,36 @@ class Repository:
                 (canonical_url,),
             ).fetchone()
             if existing is not None:
+                if transcribe and not bool(existing["transcribe"]):
+                    current = TaskStatus(existing["status"])
+                    if current == TaskStatus.COMPLETED:
+                        target = TaskStatus.AWAITING_TRANSCRIPTION
+                        message = "等待语音转写"
+                        require_transition(current, target)
+                        connection.execute(
+                            """
+                            UPDATE tasks
+                            SET transcribe=1, status=?, progress=60, message=?, updated_at=?
+                            WHERE id=?
+                            """,
+                            (target.value, message, now, existing["id"]),
+                        )
+                        connection.execute(
+                            """
+                            INSERT INTO events(task_id, status, message, created_at)
+                            VALUES(?,?,?,?)
+                            """,
+                            (existing["id"], target.value, message, now),
+                        )
+                    else:
+                        connection.execute(
+                            "UPDATE tasks SET transcribe=1, updated_at=? WHERE id=?",
+                            (now, existing["id"]),
+                        )
+                    existing = connection.execute(
+                        "SELECT * FROM tasks WHERE id=?",
+                        (existing["id"],),
+                    ).fetchone()
                 return self._task(existing), False
             connection.execute(
                 """
