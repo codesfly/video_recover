@@ -3,11 +3,12 @@ from __future__ import annotations
 import os
 import platform
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from playwright.sync_api import Response, Route, sync_playwright
+from playwright.sync_api import Page, Response, Route, sync_playwright
 
 from video_recover.errors import ParserChanged
 from video_recover.parsers import DouyinPageParser, ResolvedMedia
@@ -61,7 +62,10 @@ def parse_detail_response(response: Response, aweme_id: str) -> Mapping[str, Any
     return detail if isinstance(detail, dict) else None
 
 
-def load_detail_with_anonymous_browser(canonical_url: str, aweme_id: str) -> Mapping[str, Any]:
+@contextmanager
+def anonymous_page(
+    *, blocked_resource_types: frozenset[str] = BLOCKED_RESOURCE_TYPES
+) -> Iterator[Page]:
     with sync_playwright() as playwright:
         launch_options: dict[str, Any] = {
             "headless": True,
@@ -93,28 +97,33 @@ def load_detail_with_anonymous_browser(canonical_url: str, aweme_id: str) -> Map
             page = context.new_page()
 
             def route_request(route: Route) -> None:
-                if should_block_resource(route.request.resource_type):
+                if route.request.resource_type in blocked_resource_types:
                     route.abort()
                 else:
                     route.continue_()
 
             page.route("**/*", route_request)
-            detail: Mapping[str, Any] | None = None
-
-            def capture_detail(response: Response) -> None:
-                nonlocal detail
-                detail = detail or parse_detail_response(response, aweme_id)
-
-            page.on("response", capture_detail)
-            page.goto(canonical_url, wait_until="domcontentloaded", timeout=45_000)
-            deadline = time.monotonic() + 45
-            while detail is None and time.monotonic() < deadline:
-                page.wait_for_timeout(250)
-            if detail is None:
-                raise ParserChanged("匿名浏览器没有返回视频详情")
-            return detail
+            yield page
         finally:
             browser.close()
+
+
+def load_detail_with_anonymous_browser(canonical_url: str, aweme_id: str) -> Mapping[str, Any]:
+    with anonymous_page() as page:
+        detail: Mapping[str, Any] | None = None
+
+        def capture_detail(response: Response) -> None:
+            nonlocal detail
+            detail = detail or parse_detail_response(response, aweme_id)
+
+        page.on("response", capture_detail)
+        page.goto(canonical_url, wait_until="domcontentloaded", timeout=45_000)
+        deadline = time.monotonic() + 45
+        while detail is None and time.monotonic() < deadline:
+            page.wait_for_timeout(250)
+        if detail is None:
+            raise ParserChanged("匿名浏览器没有返回视频详情")
+        return detail
 
 
 class AnonymousBrowserParser:

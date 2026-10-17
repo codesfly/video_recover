@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 from video_recover.comments import (
     CommentPage,
+    comment_list_url,
     harvest_comments,
     map_comment,
     render_markdown,
@@ -145,3 +147,14 @@ def test_fixture_page_round_trip_and_markdown_sorted_by_likes() -> None:
     first, second = [line for line in lines if line.startswith("- 👍")]
     assert first.startswith("- 👍617 💬136")
     assert "我今天生日 一个人在加拿大" in second  # newlines flattened
+
+
+def test_comment_list_url_strips_signatures_and_sets_paging() -> None:
+    template = (
+        "https://www.douyin.com/aweme/v1/web/comment/list/?device_platform=webapp&aid=6383"
+        "&aweme_id=7692767036498596273&cursor=0&count=5&msToken=abc&a_bogus=xyz&X-Bogus=q"
+    )
+    query = parse_qs(urlsplit(comment_list_url(template, cursor=40, count=20)).query)
+    assert query["cursor"] == ["40"] and query["count"] == ["20"]
+    assert query["aweme_id"] == ["7692767036498596273"]
+    assert not {"a_bogus", "msToken", "X-Bogus"} & query.keys()
