@@ -1,0 +1,16 @@
+{
+  "http": 200,
+  "status_code": 0,
+  "has_more": true,
+  "cursor": 20,
+  "total": 1131,
+  "comments": [
+    {"cid": "7694475988264682277", "text": "这个是真的想学，求出教程[色]", "digg_count": 617,
+     "reply_comment_total": 136, "create_time": 1791029240, "ip_label": "广东", "nickname": "用户A"},
+    {"cid": "7694471438568620838", "text": "我今天生日\n一个人在加拿大", "digg_count": 376,
+     "reply_comment_total": 6, "create_time": 1791030000, "ip_label": "海外", "nickname": "用户B"},
+    {"cid": "7694475988264682277", "text": "重复条目", "digg_count": 1,
+     "reply_comment_total": 0, "create_time": 1791029240, "ip_label": "广东", "nickname": "用户A"},
+    {"text": "没有 cid 的脏数据"}
+  ]
+}
