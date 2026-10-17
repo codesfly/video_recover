@@ -94,6 +94,8 @@ tail -f ~/Library/Logs/VideoRecover/worker.error.log
 
 同一规范化视频链接会复用已有任务，避免重复下载。
 
+视频详情底部的「评论」区块可以拉取评论快照，见下文「评论快照」。
+
 ### 匿名解析与 CDN 下载
 
 服务先尝试轻量解析；当抖音只返回浏览器校验页面时，会临时启动容器内的匿名 Chromium，自动完成页面校验、读取视频详情并提取 `douyinvod.com`、`zjcdn.com` 等 CDN 地址。随后由普通 HTTP 下载器直接保存视频。
@@ -133,7 +135,33 @@ transcript.srt     带时间轴字幕
 transcript.md      发布原文与分段语音合集
 ```
 
+拉取过评论的视频还会有 `comments/` 子目录，见下节。
+
 SQLite、密钥和缓存也位于同一数据根目录。不要只复制 `downloads` 作为完整备份。
+
+## 评论快照
+
+可以为任一视频拉取一级评论，每次拉取存成一份独立快照，不覆盖旧快照：
+
+```text
+comments/20261018T031500Z-1a2b3c4d.json   每次快照一份（cid、正文、点赞、回复数、时间、IP 属地、昵称）
+comments/latest.md                        最近一次快照，按点赞排序
+```
+
+- 只走匿名浏览器，不使用 Cookie；**只拉一级评论**，楼中楼回复匿名拿不到，只保留回复数。
+- 默认每次最多 200 条（`VIDEO_RECOVER_COMMENTS_DEFAULT_MAX`，上限 1000）；单次任务最长 180 秒。
+- 不保存评论者的 uid、sec_uid、头像。
+- 评论任务排在视频下载之后执行，不影响视频任务状态；不要求视频已下载完成。
+- 原理：在视频页内请求评论接口，由抖音页面自带的安全 SDK 自动签名。若错误码为 `comment_sign_missing`，说明抖音改了页面 SDK，这条路径需要更新。详见 `docs/superpowers/spikes/2026-10-18-anonymous-comments-spike.md`。
+
+REST 接口：
+
+```text
+POST /api/tasks/{task_id}/comments              {"max_comments": 200}，排一个评论任务
+GET  /api/tasks/{task_id}/comments              评论任务列表
+GET  /api/tasks/{task_id}/comments/{job_id}     某次快照（?sort=likes|time&limit=100）
+GET  /api/tasks/{task_id}/comments/latest.md    下载最近一次快照的 Markdown
+```
 
 ## MCP：Codex 与 Claude Desktop
 
@@ -159,15 +187,17 @@ codex mcp get video-recover
 Claude Desktop 使用本地 stdio：安装脚本会备份并合并
 `~/Library/Application Support/Claude/claude_desktop_config.json`，随后需要重启 Claude Desktop。
 
-两个客户端只暴露以下七个安全工具：
+两个客户端只暴露以下九个安全工具：
 
-- `submit_video`
+- `submit_video`（`fetch_comments=true` 时同时排一个评论任务）
 - `get_task`
 - `list_videos`
 - `get_metadata`
 - `get_transcript`
 - `retry_task`
 - `get_service_status`
+- `fetch_comments`：异步拉取一级评论快照
+- `get_comments`：按点赞或时间读取快照，每条一行的紧凑文本
 
 匿名浏览器的临时会话不会暴露给 Agent；删除馆藏也不会通过 MCP 开放。
 
@@ -245,6 +275,12 @@ docker compose config -q
 
 ```bash
 VIDEO_RECOVER_LIVE=1 .venv/bin/python -m pytest tests/e2e/test_live_douyin.py -m live -q -s
+```
+
+评论匿名拉取的真实验收（只读，不下载视频）：
+
+```bash
+VIDEO_RECOVER_LIVE=1 .venv/bin/python -m pytest tests/e2e/test_live_comments.py -m live -q -s
 ```
 
 设计说明与完整实施计划位于 `docs/superpowers/`。
