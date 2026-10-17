@@ -46,7 +46,7 @@ Conventions for every task: when a step says "append" to a test or source file, 
 - Modify: `src/video_recover/errors.py`
 - Test: `tests/unit/test_domain.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/unit/test_domain.py`:
 
@@ -77,12 +77,12 @@ def test_comment_errors_have_stable_codes_and_retry_flags() -> None:
     assert all(e().retryable for e in (CommentSignMissing, CommentFetchStalled, CommentRateLimited))
 ```
 
-- [ ] **Step 2: Run it and confirm the import fails**
+- [x] **Step 2: Run it and confirm the import fails**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_domain.py -q`
 Expected: `ImportError: cannot import name 'ACTIVE_COMMENT_STATUSES'`.
 
-- [ ] **Step 3: Add the domain types**
+- [x] **Step 3: Add the domain types**
 
 Append to `src/video_recover/domain.py`:
 
@@ -116,7 +116,7 @@ class CommentJob:
     finished_at: datetime | None
 ```
 
-- [ ] **Step 4: Add the errors**
+- [x] **Step 4: Add the errors**
 
 Append to `src/video_recover/errors.py`:
 
@@ -145,12 +145,12 @@ class CommentRateLimited(UserFacingError):
         super().__init__("comment_rate_limited", "抖音暂时限制了评论读取，请稍后重试", retryable=True)
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_domain.py -q`
 Expected: all pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/video_recover/domain.py src/video_recover/errors.py tests/unit/test_domain.py
@@ -166,7 +166,7 @@ git commit -m "feat(comments): add comment job domain types and errors"
 - Create: `tests/fixtures/douyin_comment_page.json`
 - Create: `tests/unit/test_comments.py`
 
-- [ ] **Step 1: Create the fixture**
+- [x] **Step 1: Create the fixture**
 
 `tests/fixtures/douyin_comment_page.json` holds the JS-projected shape (what `FETCH_PAGE_JS` in Task 3 returns), with nicknames replaced:
 
@@ -189,7 +189,7 @@ git commit -m "feat(comments): add comment job domain types and errors"
 }
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `tests/unit/test_comments.py`:
 
@@ -343,12 +343,12 @@ def test_fixture_page_round_trip_and_markdown_sorted_by_likes() -> None:
     assert "我今天生日 一个人在加拿大" in second  # newlines flattened
 ```
 
-- [ ] **Step 3: Run and confirm the module is missing**
+- [x] **Step 3: Run and confirm the module is missing**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_comments.py -q`
 Expected: `ModuleNotFoundError: No module named 'video_recover.comments'`.
 
-- [ ] **Step 4: Implement the pure part of `comments.py`**
+- [x] **Step 4: Implement the pure part of `comments.py`**
 
 ```python
 from __future__ import annotations
@@ -524,12 +524,12 @@ Notes for the implementer:
 - `fixture_page` in the test pops `signed` before `CommentPage.from_js`; keep `from_js` ignoring unknown keys.
 - Comment order in the harvest is first-seen API order; Markdown and readers sort on demand.
 
-- [ ] **Step 5: Run the tests and ruff**
+- [x] **Step 5: Run the tests and ruff**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_comments.py -q && .venv/bin/ruff check src tests`
 Expected: all pass, ruff clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/video_recover/comments.py tests/unit/test_comments.py tests/fixtures/douyin_comment_page.json
@@ -545,7 +545,7 @@ git commit -m "feat(comments): add pure comment harvesting loop and markdown ren
 - Modify: `src/video_recover/comments.py`
 - Test: `tests/unit/test_comments.py`, existing `tests/integration/test_parsers.py`
 
-- [ ] **Step 1: Write the failing URL test**
+- [x] **Step 1: Write the failing URL test**
 
 Append to `tests/unit/test_comments.py`:
 
@@ -566,12 +566,12 @@ def test_comment_list_url_strips_signatures_and_sets_paging() -> None:
     assert not {"a_bogus", "msToken", "X-Bogus"} & query.keys()
 ```
 
-- [ ] **Step 2: Run to confirm failure**
+- [x] **Step 2: Run to confirm failure**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_comments.py -q -k comment_list_url`
 Expected: `ImportError`.
 
-- [ ] **Step 3: Extract `anonymous_page()` in `browser_parser.py`**
+- [x] **Step 3: Extract `anonymous_page()` in `browser_parser.py`**
 
 Replace the body of `load_detail_with_anonymous_browser` with a shared context manager. Behaviour of video parsing must stay byte-for-byte the same (same launch args, UA, locale, timezone, viewport, and `BLOCKED_RESOURCE_TYPES`).
 
@@ -644,7 +644,7 @@ def load_detail_with_anonymous_browser(canonical_url: str, aweme_id: str) -> Map
 
 Keep `should_block_resource` for its existing tests.
 
-- [ ] **Step 4: Add the browser source and fetcher to `comments.py`**
+- [x] **Step 4: Add the browser source and fetcher to `comments.py`**
 
 ```python
 import random
@@ -766,12 +766,12 @@ class AnonymousCommentFetcher:
 
 The lazy import keeps `comments.py` importable in unit tests without touching Playwright at import time. Place the new imports at the top of the module (ruff `I` rule); the snippet above lists them separately only for readability.
 
-- [ ] **Step 5: Run unit and parser tests**
+- [x] **Step 5: Run unit and parser tests**
 
 Run: `.venv/bin/python -m pytest tests/unit tests/integration/test_parsers.py -q && .venv/bin/ruff check src tests`
 Expected: all pass. `test_parsers.py` proves the `anonymous_page` refactor did not change video parsing.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/video_recover/browser_parser.py src/video_recover/comments.py tests/unit/test_comments.py
@@ -786,7 +786,7 @@ git commit -m "feat(comments): fetch comment pages through the anonymous page SD
 - Modify: `src/video_recover/repository.py`
 - Create: `tests/integration/test_comment_jobs.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 from __future__ import annotations
@@ -856,12 +856,12 @@ def test_comment_jobs_cascade_with_task(tmp_path) -> None:
     assert repository.list_comment_jobs(task.id) == []
 ```
 
-- [ ] **Step 2: Run to confirm failure**
+- [x] **Step 2: Run to confirm failure**
 
 Run: `.venv/bin/python -m pytest tests/integration/test_comment_jobs.py -q`
 Expected: `AttributeError: 'Repository' object has no attribute 'create_or_get_comment_job'`.
 
-- [ ] **Step 3: Extend the schema**
+- [x] **Step 3: Extend the schema**
 
 Append inside `SCHEMA`, after the existing index statements:
 
@@ -890,7 +890,7 @@ CREATE INDEX IF NOT EXISTS idx_comment_jobs_status_created ON comment_jobs(statu
 
 Existing databases pick this up on the next `_initialize()`; no migration is needed.
 
-- [ ] **Step 4: Implement the methods**
+- [x] **Step 4: Implement the methods**
 
 Add to `Repository` (import `CommentJob`, `CommentJobStatus` from `domain`):
 
@@ -1033,12 +1033,12 @@ Add to `Repository` (import `CommentJob`, `CommentJobStatus` from `domain`):
 
 `finish_comment_job` only updates a `running` row, so a job requeued by a restart cannot be overwritten by a stale worker.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `.venv/bin/python -m pytest tests/integration/test_comment_jobs.py tests/integration/test_repository.py -q`
 Expected: all pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/video_recover/repository.py tests/integration/test_comment_jobs.py
@@ -1054,7 +1054,7 @@ git commit -m "feat(comments): persist comment jobs with one active job per vide
 - Modify: `src/video_recover/service.py`
 - Test: `tests/integration/test_comment_jobs.py`
 
-- [ ] **Step 1: Add settings**
+- [x] **Step 1: Add settings**
 
 In `Settings`:
 
@@ -1064,7 +1064,7 @@ In `Settings`:
     comments_page_timeout_seconds: int = Field(default=20, ge=5)
 ```
 
-- [ ] **Step 2: Write the failing service tests**
+- [x] **Step 2: Write the failing service tests**
 
 Append to `tests/integration/test_comment_jobs.py`:
 
@@ -1189,12 +1189,12 @@ def test_submit_can_queue_comments_and_delete_cleans_folder(tmp_path) -> None:
     assert not (settings.download_dir / AWEME_ID).exists()
 ```
 
-- [ ] **Step 3: Run to confirm failure**
+- [x] **Step 3: Run to confirm failure**
 
 Run: `.venv/bin/python -m pytest tests/integration/test_comment_jobs.py -q`
 Expected: `TypeError: VideoService.__init__() got an unexpected keyword argument 'comment_fetcher'`.
 
-- [ ] **Step 4: Implement in `service.py`**
+- [x] **Step 4: Implement in `service.py`**
 
 Constructor and helpers:
 
@@ -1359,12 +1359,12 @@ Then remove `task.output_dir` as today, and additionally `shutil.rmtree(aweme_di
 
 Import `datetime`, `UTC` and `normalize_douyin_url` in `service.py` if missing.
 
-- [ ] **Step 5: Run service and existing tests**
+- [x] **Step 5: Run service and existing tests**
 
 Run: `.venv/bin/python -m pytest tests/integration -q`
 Expected: all pass (existing `VideoService(...)` call sites keep working because `comment_fetcher` defaults to `None`).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/video_recover/config.py src/video_recover/service.py tests/integration/test_comment_jobs.py
@@ -1380,7 +1380,7 @@ git commit -m "feat(comments): store comment snapshots and read them back sorted
 - Modify: `src/video_recover/main.py`
 - Test: `tests/integration/test_runner.py`
 
-- [ ] **Step 1: Write the failing runner tests**
+- [x] **Step 1: Write the failing runner tests**
 
 Extend `make_context` in `tests/integration/test_runner.py` with a `comment_fetcher=None` keyword passed to `VideoService`, then add:
 
@@ -1420,11 +1420,11 @@ def test_comment_jobs_are_skipped_without_fetcher_and_requeued_on_startup(tmp_pa
 
 `make_context` returns `(service, repository, runner)`; only `comment_fetcher` is new.
 
-- [ ] **Step 2: Run to confirm failure**
+- [x] **Step 2: Run to confirm failure**
 
 Run: `.venv/bin/python -m pytest tests/integration/test_runner.py -q`
 
-- [ ] **Step 3: Schedule comment jobs in `run_once`**
+- [x] **Step 3: Schedule comment jobs in `run_once`**
 
 Between the pipeline block and the CPU fallback block:
 
@@ -1450,7 +1450,7 @@ Between the pipeline block and the CPU fallback block:
 
 In `recover_startup`, also call `self.repository.recover_interrupted_comment_jobs()` and include it in the returned count.
 
-- [ ] **Step 4: Wire the fetcher in `main.py`**
+- [x] **Step 4: Wire the fetcher in `main.py`**
 
 ```python
 from video_recover.comments import AnonymousCommentFetcher
@@ -1468,12 +1468,12 @@ def build_service(settings: Settings) -> VideoService:
     )
 ```
 
-- [ ] **Step 5: Run the suite**
+- [x] **Step 5: Run the suite**
 
 Run: `.venv/bin/python -m pytest -m 'not live and not mac_live' -q`
 Expected: only the baseline `compose.yaml` failure.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/video_recover/runner.py src/video_recover/main.py tests/integration/test_runner.py
@@ -1488,7 +1488,7 @@ git commit -m "feat(comments): run comment jobs after the download pipeline"
 - Modify: `src/video_recover/api.py`
 - Test: `tests/integration/test_api.py`
 
-- [ ] **Step 1: Write the failing API test**
+- [x] **Step 1: Write the failing API test**
 
 `make_client` in `test_api.py` builds its own `VideoService`; add a `comment_fetcher` parameter (default `None`) and pass it through. Then:
 
@@ -1520,7 +1520,7 @@ def test_comment_endpoints_queue_list_read_and_download(tmp_path: Path) -> None:
     assert client.get(f"/api/tasks/{task_id}/comments/not-a-job").status_code == 404
 ```
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 Models:
 
@@ -1613,12 +1613,12 @@ Routes inside `build_router` — register `latest.md` **before** `{job_id}`:
 
 Add a module-level `comment_job_response(job: CommentJob) -> CommentJobResponse` next to `task_response`, and update the delete route's 409 detail to cover comments (`"任务处理中或正在拉取评论，暂时不能删除"`).
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 Run: `.venv/bin/python -m pytest tests/integration/test_api.py -q`
 Expected: pass, including `test_openapi_includes_public_and_internal_contracts`; extend that test's expected paths with the three comment paths if it asserts an exact set.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/video_recover/api.py tests/integration/test_api.py
@@ -1633,7 +1633,7 @@ git commit -m "feat(comments): expose comment jobs and snapshots over REST"
 - Modify: `src/video_recover/mcp_server.py`
 - Test: `tests/integration/test_mcp.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add `"fetch_comments"` and `"get_comments"` to `EXPECTED_TOOLS`, let `make_service` accept `comment_fetcher`, then:
 
@@ -1667,7 +1667,7 @@ async def test_comment_tools_queue_and_return_compact_text(tmp_path: Path) -> No
     assert again["ok"] is True and again["created"] is True
 ```
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 `submit_video` gains `fetch_comments: bool = False`, passes it to `service.submit`, and adds `comment_job_id` (latest active job id or `None`) to the payload.
 
@@ -1733,11 +1733,11 @@ Add `_comment_job_payload(job)` next to `_task_payload` with `job_id`, `status`,
 
 Extend the server `instructions`: "Comment snapshots are also asynchronous: call fetch_comments, then poll get_comments. Only top-level comments are available; replies are not collected."
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 Run: `.venv/bin/python -m pytest tests/integration/test_mcp.py -q`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/video_recover/mcp_server.py tests/integration/test_mcp.py
@@ -1754,7 +1754,7 @@ git commit -m "feat(comments): add fetch_comments and get_comments MCP tools"
 - Modify: `src/video_recover/static/app.css`
 - Test: `tests/integration/test_web.py`
 
-- [ ] **Step 1: Lock the DOM contract**
+- [x] **Step 1: Lock the DOM contract**
 
 In `test_archive_page_has_compact_workspace_and_accessible_controls` add:
 
@@ -1768,7 +1768,7 @@ In `test_archive_page_has_compact_workspace_and_accessible_controls` add:
 
 and in the asset test: `assert ".comment-list" in stylesheet.text`.
 
-- [ ] **Step 2: Template**
+- [x] **Step 2: Template**
 
 After the transcript `copy-section` (inside the same column), add:
 
@@ -1790,7 +1790,7 @@ After the transcript `copy-section` (inside the same column), add:
 
 Reuse an existing visually-hidden utility class if the stylesheet already has one; otherwise add it in Step 4.
 
-- [ ] **Step 3: JavaScript**
+- [x] **Step 3: JavaScript**
 
 Inside the existing IIFE, following the `api()` / `renderRecord()` style:
 
@@ -1799,16 +1799,16 @@ Inside the existing IIFE, following the `api()` / `renderRecord()` style:
 - Call `loadComments` from `renderRecord`, bind `#comments-fetch` click and `#comments-snapshot` change in `bindEvents`.
 - Abort with the same `AbortController` signal `renderRecord` already receives so switching tasks cancels stale requests.
 
-- [ ] **Step 4: CSS**
+- [x] **Step 4: CSS**
 
 Add `.comments-section`, `.comments-toolbar`, `.comment-list` (no bullets, 0.5rem gap, `max-height: 28rem; overflow-y: auto`), `.comment-meta` (muted tabular numbers), using the existing paper/vermilion tokens. Keep the mobile layout free of horizontal overflow (the e2e test checks this).
 
-- [ ] **Step 5: Run Web tests**
+- [x] **Step 5: Run Web tests**
 
 Run: `.venv/bin/python -m pytest tests/integration/test_web.py tests/e2e/test_web_ui.py -q`
 Expected: pass (`test_web_ui.py` drives system Chrome; it must still report no console errors).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/video_recover/templates/index.html src/video_recover/static tests/integration/test_web.py
@@ -1823,7 +1823,7 @@ git commit -m "feat(comments): show comment snapshots in the web workspace"
 - Create: `tests/e2e/test_live_comments.py`
 - Modify: `README.md`
 
-- [ ] **Step 1: Live test (skipped by default)**
+- [x] **Step 1: Live test (skipped by default)**
 
 ```python
 from __future__ import annotations
@@ -1850,13 +1850,13 @@ def test_anonymous_fetcher_reads_three_signed_pages() -> None:
     assert len({c.cid for c in harvest.comments}) == len(harvest.comments)
 ```
 
-- [ ] **Step 2: README**
+- [x] **Step 2: README**
 
 - Add `fetch_comments` / `get_comments` to the MCP tool list and `submit_video(fetch_comments)`.
 - Add the four REST endpoints.
 - Add a short "评论快照" section: anonymous only, top-level only (replies need login), default 200 / max 1000, snapshots in `downloads/<aweme_id>/comments/`, the SDK-signing dependency and what `comment_sign_missing` means.
 
-- [ ] **Step 3: Full local verification**
+- [x] **Step 3: Full local verification**
 
 ```bash
 .venv/bin/python -m pytest -m 'not live and not mac_live' -q
@@ -1877,7 +1877,7 @@ docker run --rm -e VIDEO_RECOVER_LIVE=1 --entrypoint python video-recover:commen
 
 Expected: `>=3 >=40 None`. Do **not** run `./scripts/dev-up.sh` or replace the resident `video-recover-app-1` container without asking the owner first.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/e2e/test_live_comments.py README.md
