@@ -3,15 +3,19 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import shutil
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
 import httpx
 
+from video_recover.comments import Comment, CommentFetcher, render_markdown
 from video_recover.config import Settings
 from video_recover.crypto import CookieVault
-from video_recover.domain import Segment, Task, TaskStatus
+from video_recover.domain import CommentJob, CommentJobStatus, Segment, Task, TaskStatus
 from video_recover.errors import (
     CaptureConflict,
     DownloadFailed,
@@ -25,6 +29,16 @@ from video_recover.parsers import Parser, ResolvedMedia
 from video_recover.repository import Repository
 from video_recover.transcript import write_artifacts
 from video_recover.url_policy import normalize_douyin_url, resolve_douyin_url
+
+SNAPSHOT_NAME = re.compile(r"^\d{8}T\d{6}Z-[0-9a-f]{8}$")
+
+
+@dataclass(frozen=True, slots=True)
+class CommentView:
+    job: CommentJob
+    fetched_at: str
+    total_in_snapshot: int
+    comments: list[Comment]
 
 
 class DownloadFunction(Protocol):
@@ -76,12 +90,14 @@ class VideoService:
         parser: Parser,
         cookie_vault: CookieVault,
         url_client: httpx.Client | None = None,
+        comment_fetcher: CommentFetcher | None = None,
     ) -> None:
         self.settings = settings
         self.repository = repository
         self.parser = parser
         self.cookie_vault = cookie_vault
         self.url_client = url_client or httpx.Client(timeout=20)
+        self.comment_fetcher = comment_fetcher
 
     def submit(
         self,
@@ -89,17 +105,21 @@ class VideoService:
         *,
         source: str = "web",
         transcribe: bool = True,
+        fetch_comments: bool = False,
     ) -> tuple[Task, bool]:
         try:
             normalized = normalize_douyin_url(url)
         except UserFacingError:
             normalized = resolve_douyin_url(url, client=self.url_client)
-        return self.repository.create_or_get_task(
+        task, created = self.repository.create_or_get_task(
             normalized.canonical_url,
             original_url=url,
             source=source,
             transcribe=transcribe,
         )
+        if fetch_comments and task.status != TaskStatus.CANCELLED:
+            self.request_comments(task.id)
+        return task, created
 
     def save_cookie(self, cookie: str) -> None:
         encrypted = self.cookie_vault.encrypt(cookie).decode("ascii")
@@ -300,11 +320,143 @@ class VideoService:
             TaskStatus.TRANSCRIBING,
         }:
             raise InvalidTransition("cannot delete a task while it is processing")
-        if task.output_dir is not None:
-            root = self.settings.download_dir.resolve()
-            output_dir = task.output_dir.resolve()
-            if not output_dir.is_relative_to(root):
+        if self.repository.has_running_comment_job(task.id):
+            raise InvalidTransition("cannot delete a task while comments are being fetched")
+        root = self.settings.download_dir.resolve()
+        # The aweme folder also holds comment snapshots taken before the video was downloaded.
+        aweme_dir = self.settings.download_dir / normalize_douyin_url(task.canonical_url).aweme_id
+        for directory in {task.output_dir, aweme_dir} - {None}:
+            resolved = directory.resolve()
+            if not resolved.is_relative_to(root) or resolved == root:
                 raise RuntimeError("task output directory escapes download root")
-            shutil.rmtree(output_dir, ignore_errors=True)
+            shutil.rmtree(resolved, ignore_errors=True)
         if not self.repository.delete_task(task_id):
             raise KeyError(task_id)
+
+    def comments_dir(self, task: Task) -> Path:
+        aweme_id = normalize_douyin_url(task.canonical_url).aweme_id
+        return self.settings.download_dir / aweme_id / "comments"
+
+    def request_comments(
+        self, task_id: str, *, max_comments: int | None = None
+    ) -> tuple[CommentJob, bool]:
+        task = self.repository.get_task(task_id)
+        if task.status == TaskStatus.CANCELLED:
+            raise InvalidTransition("cannot fetch comments for a cancelled task")
+        limit = max_comments if max_comments is not None else self.settings.comments_default_max
+        if not 1 <= limit <= 1000:
+            raise ValueError("max_comments must be between 1 and 1000")
+        return self.repository.create_or_get_comment_job(task.id, max_comments=limit)
+
+    def process_comment_job(self, job: CommentJob) -> CommentJob:
+        if self.comment_fetcher is None:
+            raise RuntimeError("comment fetcher is not configured")
+        task = self.repository.get_task(job.task_id)
+        try:
+            harvest = self.comment_fetcher.fetch(
+                task.canonical_url,
+                max_comments=job.max_comments,
+                deadline_seconds=self.settings.comments_job_timeout_seconds,
+            )
+        except UserFacingError as exc:
+            return self._finish_comment_failure(job, exc)
+        error = harvest.stop_error
+        if error is not None and not harvest.comments:
+            return self._finish_comment_failure(job, error, pages=harvest.pages)
+        status = CommentJobStatus.COMPLETED if error is None else CommentJobStatus.PARTIAL
+        fetched_at = self.repository.clock().astimezone(UTC)
+        snapshot_name = f"{fetched_at:%Y%m%dT%H%M%SZ}-{job.id[:8]}"
+        folder = self.comments_dir(task)
+        folder.mkdir(parents=True, exist_ok=True)
+        aweme_id = folder.parent.name
+        payload = {
+            "aweme_id": aweme_id,
+            "fetched_at": fetched_at.isoformat(),
+            "status": status.value,
+            "pages": harvest.pages,
+            "has_more_remaining": harvest.has_more_remaining,
+            "total_reported": harvest.total_reported,
+            "comments": [
+                {**asdict(c), "created_at": c.created_at.isoformat() if c.created_at else None}
+                for c in harvest.comments
+            ],
+        }
+        _atomic_text(
+            folder / f"{snapshot_name}.json",
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        )
+        _atomic_text(
+            folder / "latest.md",
+            render_markdown(aweme_id=aweme_id, fetched_at=fetched_at, harvest=harvest),
+        )
+        return self.repository.finish_comment_job(
+            job.id,
+            status=status,
+            fetched_count=len(harvest.comments),
+            pages=harvest.pages,
+            has_more_remaining=harvest.has_more_remaining,
+            total_reported=harvest.total_reported,
+            snapshot_name=snapshot_name,
+            error_code=None if error is None else error.code,
+            error_message=None if error is None else error.message,
+        )
+
+    def _finish_comment_failure(
+        self, job: CommentJob, error: UserFacingError, *, pages: int = 0
+    ) -> CommentJob:
+        return self.repository.finish_comment_job(
+            job.id,
+            status=CommentJobStatus.FAILED,
+            fetched_count=0,
+            pages=pages,
+            has_more_remaining=False,
+            total_reported=None,
+            snapshot_name=None,
+            error_code=error.code,
+            error_message=error.message,
+        )
+
+    def read_comments(
+        self,
+        task_id: str,
+        *,
+        job_id: str | None = None,
+        sort: str = "likes",
+        limit: int = 50,
+    ) -> CommentView | None:
+        task = self.repository.get_task(task_id)
+        if job_id is None:
+            job = self.repository.latest_comment_snapshot_job(task.id)
+        else:
+            job = self.repository.get_comment_job(job_id)
+            if job.task_id != task.id:
+                raise KeyError(job_id)
+        if job is None or job.snapshot_name is None:
+            return None
+        if not SNAPSHOT_NAME.fullmatch(job.snapshot_name):
+            raise RuntimeError("invalid comment snapshot name")
+        snapshot_path = self.comments_dir(task) / f"{job.snapshot_name}.json"
+        payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        comments = [
+            Comment(
+                **{
+                    **raw,
+                    "created_at": datetime.fromisoformat(raw["created_at"])
+                    if raw["created_at"]
+                    else None,
+                }
+            )
+            for raw in payload["comments"]
+        ]
+        if sort == "time":
+            comments.sort(
+                key=lambda c: c.created_at or datetime.min.replace(tzinfo=UTC), reverse=True
+            )
+        else:
+            comments.sort(key=lambda c: -c.digg_count)
+        return CommentView(
+            job=job,
+            fetched_at=payload["fetched_at"],
+            total_in_snapshot=len(comments),
+            comments=comments[: max(1, min(limit, 1000))],
+        )

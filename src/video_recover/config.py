@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     cpu_fallback_enabled: bool = True
     max_download_bytes: int = Field(default=2 * 1024 * 1024 * 1024, ge=1)
     minimum_free_bytes: int = Field(default=512 * 1024 * 1024, ge=1)
+    comments_default_max: int = Field(default=200, ge=1, le=1000)
+    comments_job_timeout_seconds: int = Field(default=180, ge=30)
+    comments_page_timeout_seconds: int = Field(default=20, ge=5)
 
     @property
     def database_path(self) -> Path:
