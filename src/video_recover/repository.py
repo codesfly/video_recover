@@ -9,6 +9,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from video_recover.domain import (
+    CommentJob,
+    CommentJobStatus,
     Task,
     TaskEvent,
     TaskStatus,
@@ -62,6 +64,27 @@ CREATE TABLE IF NOT EXISTS transcription_leases (
 CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_events_task_id ON events(task_id, id);
 CREATE INDEX IF NOT EXISTS idx_leases_expires_at ON transcription_leases(expires_at);
+
+CREATE TABLE IF NOT EXISTS comment_jobs (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    max_comments INTEGER NOT NULL CHECK(max_comments BETWEEN 1 AND 1000),
+    fetched_count INTEGER NOT NULL DEFAULT 0,
+    pages INTEGER NOT NULL DEFAULT 0,
+    has_more_remaining INTEGER NOT NULL DEFAULT 0 CHECK(has_more_remaining IN (0, 1)),
+    total_reported INTEGER,
+    snapshot_name TEXT,
+    error_code TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_comment_jobs_one_active
+    ON comment_jobs(task_id) WHERE status IN ('queued', 'running');
+CREATE INDEX IF NOT EXISTS idx_comment_jobs_status_created ON comment_jobs(status, created_at);
 """
 
 
@@ -658,3 +681,138 @@ class Repository:
                 "UPDATE tasks SET metadata_json=?, updated_at=? WHERE id=?",
                 (json.dumps(metadata, ensure_ascii=False), _iso(self.clock()), task_id),
             )
+
+    def create_or_get_comment_job(
+        self, task_id: str, *, max_comments: int
+    ) -> tuple[CommentJob, bool]:
+        now = _iso(self.clock())
+        job_id = str(uuid4())
+        with self.transaction(immediate=True) as connection:
+            active = connection.execute(
+                "SELECT * FROM comment_jobs WHERE task_id=? AND status IN (?, ?)",
+                (task_id, CommentJobStatus.QUEUED.value, CommentJobStatus.RUNNING.value),
+            ).fetchone()
+            if active is not None:
+                return self._comment_job(active), False
+            connection.execute(
+                """
+                INSERT INTO comment_jobs(id, task_id, status, max_comments, created_at)
+                VALUES(?,?,?,?,?)
+                """,
+                (job_id, task_id, CommentJobStatus.QUEUED.value, max_comments, now),
+            )
+        return self.get_comment_job(job_id), True
+
+    def get_comment_job(self, job_id: str) -> CommentJob:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM comment_jobs WHERE id=?", (job_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(job_id)
+        return self._comment_job(row)
+
+    def list_comment_jobs(self, task_id: str) -> list[CommentJob]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM comment_jobs WHERE task_id=? ORDER BY created_at DESC, rowid DESC",
+                (task_id,),
+            ).fetchall()
+        return [self._comment_job(row) for row in rows]
+
+    def latest_comment_snapshot_job(self, task_id: str) -> CommentJob | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM comment_jobs
+                WHERE task_id=? AND snapshot_name IS NOT NULL AND status IN (?, ?)
+                ORDER BY finished_at DESC LIMIT 1
+                """,
+                (task_id, CommentJobStatus.COMPLETED.value, CommentJobStatus.PARTIAL.value),
+            ).fetchone()
+        return None if row is None else self._comment_job(row)
+
+    def has_running_comment_job(self, task_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM comment_jobs WHERE task_id=? AND status=?",
+                (task_id, CommentJobStatus.RUNNING.value),
+            ).fetchone()
+        return row is not None
+
+    def claim_next_comment_job(self) -> CommentJob | None:
+        now = _iso(self.clock())
+        with self.transaction(immediate=True) as connection:
+            row = connection.execute(
+                "SELECT id FROM comment_jobs WHERE status=? ORDER BY created_at LIMIT 1",
+                (CommentJobStatus.QUEUED.value,),
+            ).fetchone()
+            if row is None:
+                return None
+            connection.execute(
+                "UPDATE comment_jobs SET status=?, started_at=? WHERE id=?",
+                (CommentJobStatus.RUNNING.value, now, row["id"]),
+            )
+            job_id = str(row["id"])
+        return self.get_comment_job(job_id)
+
+    def finish_comment_job(
+        self,
+        job_id: str,
+        *,
+        status: CommentJobStatus,
+        fetched_count: int,
+        pages: int,
+        has_more_remaining: bool,
+        total_reported: int | None,
+        snapshot_name: str | None,
+        error_code: str | None,
+        error_message: str | None,
+    ) -> CommentJob:
+        if status not in {
+            CommentJobStatus.COMPLETED, CommentJobStatus.PARTIAL, CommentJobStatus.FAILED,
+        }:
+            raise ValueError("comment jobs can only finish in a terminal state")
+        with self.transaction(immediate=True) as connection:
+            connection.execute(
+                """
+                UPDATE comment_jobs
+                SET status=?, fetched_count=?, pages=?, has_more_remaining=?,
+                    total_reported=?, snapshot_name=?, error_code=?, error_message=?,
+                    finished_at=?
+                WHERE id=? AND status=?
+                """,
+                (
+                    status.value, fetched_count, pages, int(has_more_remaining),
+                    total_reported, snapshot_name, error_code, error_message,
+                    _iso(self.clock()), job_id, CommentJobStatus.RUNNING.value,
+                ),
+            )
+        return self.get_comment_job(job_id)
+
+    def recover_interrupted_comment_jobs(self) -> int:
+        with self.transaction(immediate=True) as connection:
+            cursor = connection.execute(
+                "UPDATE comment_jobs SET status=?, started_at=NULL WHERE status=?",
+                (CommentJobStatus.QUEUED.value, CommentJobStatus.RUNNING.value),
+            )
+            return cursor.rowcount
+
+    @staticmethod
+    def _comment_job(row: sqlite3.Row) -> CommentJob:
+        return CommentJob(
+            id=str(row["id"]),
+            task_id=str(row["task_id"]),
+            status=CommentJobStatus(row["status"]),
+            max_comments=int(row["max_comments"]),
+            fetched_count=int(row["fetched_count"]),
+            pages=int(row["pages"]),
+            has_more_remaining=bool(row["has_more_remaining"]),
+            total_reported=row["total_reported"],
+            snapshot_name=row["snapshot_name"],
+            error_code=row["error_code"],
+            error_message=row["error_message"],
+            created_at=_datetime(row["created_at"]),
+            started_at=_datetime(row["started_at"]) if row["started_at"] else None,
+            finished_at=_datetime(row["finished_at"]) if row["finished_at"] else None,
+        )
