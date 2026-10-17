@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from video_recover.comments import CommentHarvest, map_comment
 from video_recover.config import Settings
 from video_recover.crypto import CookieVault
 from video_recover.main import create_app
@@ -22,6 +23,8 @@ EXPECTED_TOOLS = {
     "get_transcript",
     "retry_task",
     "get_service_status",
+    "fetch_comments",
+    "get_comments",
 }
 
 
@@ -39,7 +42,7 @@ class StubParser:
         )
 
 
-def make_service(tmp_path: Path) -> tuple[Settings, VideoService]:
+def make_service(tmp_path: Path, comment_fetcher=None) -> tuple[Settings, VideoService]:
     settings = Settings(
         data_dir=tmp_path / "data",
         worker_token="test-worker-token-long-enough",
@@ -50,6 +53,7 @@ def make_service(tmp_path: Path) -> tuple[Settings, VideoService]:
         repository=Repository(settings.database_path),
         parser=StubParser(),
         cookie_vault=CookieVault(settings.secret_key_path),
+        comment_fetcher=comment_fetcher,
     )
     return settings, service
 
@@ -130,3 +134,48 @@ def test_streamable_http_mcp_is_mounted_on_app(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["result"]["serverInfo"]["name"] == "video-recover"
+
+
+class OneCommentFetcher:
+    def fetch(self, canonical_url, *, max_comments, deadline_seconds):
+        raw = {
+            "cid": "1", "text": "第一行\n第二行", "digg_count": 7, "ip_label": "广东",
+            "create_time": 1791029240,
+        }
+        return CommentHarvest((map_comment(raw),), 1, True, 99, None)
+
+
+@pytest.mark.asyncio
+async def test_comment_tools_queue_and_return_compact_text(tmp_path: Path) -> None:
+    _settings, service = make_service(tmp_path, comment_fetcher=OneCommentFetcher())
+    mcp = build_mcp(service)
+    _c, submitted = await mcp.call_tool(
+        "submit_video", {"url": TEST_URL, "fetch_comments": True}
+    )
+    assert submitted["comment_job_id"]
+
+    _c, empty = await mcp.call_tool("get_comments", {"task_id": submitted["task_id"]})
+    assert empty["available"] is False
+    assert empty["latest_job"]["status"] == "queued"
+
+    service.process_comment_job(service.repository.claim_next_comment_job())
+    _c, result = await mcp.call_tool(
+        "get_comments", {"task_id": submitted["task_id"], "limit": 500}
+    )
+    assert result["available"] is True and result["limit"] == 200
+    assert result["text"].splitlines()[0].startswith("👍7")
+    assert "第一行 第二行" in result["text"]
+    assert result["snapshot"]["has_more_remaining"] is True
+
+    _c, again = await mcp.call_tool("fetch_comments", {"task_id": submitted["task_id"]})
+    assert again["ok"] is True and again["created"] is True
+    _c, missing = await mcp.call_tool("fetch_comments", {"task_id": "missing"})
+    assert missing["error_code"] == "not_found"
+
+
+@pytest.mark.asyncio
+async def test_comment_tools_declare_read_and_write_annotations(tmp_path: Path) -> None:
+    _settings, service = make_service(tmp_path)
+    tools = {tool.name: tool for tool in await build_mcp(service).list_tools()}
+    assert tools["get_comments"].annotations.readOnlyHint is True
+    assert tools["fetch_comments"].annotations.readOnlyHint is False
