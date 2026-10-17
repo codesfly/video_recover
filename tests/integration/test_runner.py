@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from video_recover.comments import CommentHarvest
 from video_recover.config import Settings
 from video_recover.crypto import CookieVault
 from video_recover.domain import Segment, TaskStatus
@@ -51,7 +52,9 @@ def fake_downloader(_media, target, **_options):
     return target
 
 
-def make_context(tmp_path, *, parser=None, transcriber=None, native_grace_seconds=0):
+def make_context(
+    tmp_path, *, parser=None, transcriber=None, native_grace_seconds=0, comment_fetcher=None
+):
     settings = Settings(data_dir=tmp_path / "data")
     settings.ensure_directories()
     repository = Repository(settings.database_path)
@@ -60,6 +63,7 @@ def make_context(tmp_path, *, parser=None, transcriber=None, native_grace_second
         repository=repository,
         parser=parser or StubParser(),
         cookie_vault=CookieVault(settings.secret_key_path),
+        comment_fetcher=comment_fetcher,
     )
     runner = JobRunner(
         service,
@@ -163,3 +167,49 @@ def test_runner_startup_recovery_requeues_interrupted_download(tmp_path):
     assert repository.get_task(task.id).status == TaskStatus.QUEUED
     assert runner.run_once() is True
     assert repository.get_task(task.id).status == TaskStatus.AWAITING_TRANSCRIPTION
+
+
+class EmptyCommentFetcher:
+    def fetch(self, canonical_url, *, max_comments, deadline_seconds):
+        return CommentHarvest((), 1, False, 0, None)
+
+
+class ExplodingCommentFetcher:
+    def fetch(self, canonical_url, *, max_comments, deadline_seconds):
+        raise RuntimeError("browser crashed")
+
+
+def test_pipeline_runs_before_comment_jobs(tmp_path):
+    service, repository, runner = make_context(tmp_path, comment_fetcher=EmptyCommentFetcher())
+    task, _ = service.submit(TEST_URL, fetch_comments=True)
+
+    assert runner.run_once() is True  # download pipeline first
+    assert repository.get_task(task.id).status == TaskStatus.AWAITING_TRANSCRIPTION
+    assert repository.list_comment_jobs(task.id)[0].status.value == "queued"
+    assert runner.run_once() is True  # then the comment job
+    assert repository.list_comment_jobs(task.id)[0].status.value == "completed"
+
+
+def test_comment_jobs_wait_without_fetcher_and_requeue_on_startup(tmp_path):
+    service, repository, runner = make_context(tmp_path)
+    task, _ = service.submit(TEST_URL, transcribe=False)
+    runner.run_once()
+    service.request_comments(task.id)
+    assert runner.run_once() is False  # no fetcher configured: job stays queued
+
+    repository.claim_next_comment_job()
+    runner.recover_startup()
+    assert repository.list_comment_jobs(task.id)[0].status.value == "queued"
+
+
+def test_unexpected_comment_failure_is_recorded_as_internal(tmp_path):
+    service, repository, runner = make_context(
+        tmp_path, comment_fetcher=ExplodingCommentFetcher()
+    )
+    task, _ = service.submit(TEST_URL, transcribe=False)
+    runner.run_once()
+    service.request_comments(task.id)
+
+    assert runner.run_once() is True
+    job = repository.list_comment_jobs(task.id)[0]
+    assert (job.status.value, job.error_code) == ("failed", "internal_failure")

@@ -5,7 +5,7 @@ import threading
 from collections.abc import Callable
 from datetime import datetime
 
-from video_recover.domain import TaskStatus
+from video_recover.domain import CommentJobStatus, TaskStatus
 from video_recover.downloader import download_file
 from video_recover.errors import InternalFailure, UserFacingError
 from video_recover.service import DownloadFunction, VideoService
@@ -48,6 +48,29 @@ class JobRunner:
                 self.service.record_failure(task.id, InternalFailure())
             return True
 
+        if self.service.comment_fetcher is not None:
+            comment_job = self.repository.claim_next_comment_job()
+            if comment_job is not None:
+                try:
+                    self.service.process_comment_job(comment_job)
+                except Exception:
+                    self.logger.exception(
+                        "comment job failed", extra={"comment_job_id": comment_job.id}
+                    )
+                    failure = InternalFailure()
+                    self.repository.finish_comment_job(
+                        comment_job.id,
+                        status=CommentJobStatus.FAILED,
+                        fetched_count=0,
+                        pages=0,
+                        has_more_remaining=False,
+                        total_reported=None,
+                        snapshot_name=None,
+                        error_code=failure.code,
+                        error_message=failure.message,
+                    )
+                return True
+
         if not self.allow_cpu_fallback or self.cpu_transcriber is None:
             return False
         candidate = self.repository.next_task(TaskStatus.AWAITING_TRANSCRIPTION)
@@ -78,7 +101,7 @@ class JobRunner:
     def recover_startup(self) -> int:
         recovered = self.repository.recover_interrupted_pipeline()
         self.repository.recover_expired_leases()
-        return recovered
+        return recovered + self.repository.recover_interrupted_comment_jobs()
 
     def run_forever(self) -> None:
         while not self._stop.is_set():
