@@ -70,3 +70,31 @@ class TranscriptionFailed(UserFacingError):
 class InternalFailure(UserFacingError):
     def __init__(self) -> None:
         super().__init__("internal_failure", "处理失败，请查看脱敏日志后重试", retryable=True)
+
+
+class CommentsUnavailable(UserFacingError):
+    def __init__(self) -> None:
+        super().__init__(
+            "comments_unavailable", "该视频没有可读取的评论区（可能已关闭评论或不可见）"
+        )
+
+
+class CommentSignMissing(UserFacingError):
+    def __init__(self) -> None:
+        super().__init__(
+            "comment_sign_missing",
+            "抖音页面没有为评论请求签名，评论接口可能已变化",
+            retryable=True,
+        )
+
+
+class CommentFetchStalled(UserFacingError):
+    def __init__(self, message: str = "评论加载超时，请稍后重试") -> None:
+        super().__init__("comment_fetch_stalled", message, retryable=True)
+
+
+class CommentRateLimited(UserFacingError):
+    def __init__(self) -> None:
+        super().__init__(
+            "comment_rate_limited", "抖音暂时限制了评论读取，请稍后重试", retryable=True
+        )

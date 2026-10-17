@@ -108,3 +108,32 @@ class TranscriptionLease:
     acquired_at: datetime
     heartbeat_at: datetime
     expires_at: datetime
+
+
+class CommentJobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
+ACTIVE_COMMENT_STATUSES = frozenset({CommentJobStatus.QUEUED, CommentJobStatus.RUNNING})
+
+
+@dataclass(frozen=True, slots=True)
+class CommentJob:
+    id: str
+    task_id: str
+    status: CommentJobStatus
+    max_comments: int
+    fetched_count: int
+    pages: int
+    has_more_remaining: bool
+    total_reported: int | None
+    snapshot_name: str | None
+    error_code: str | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
