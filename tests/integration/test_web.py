@@ -56,6 +56,12 @@ def test_archive_page_has_compact_workspace_and_accessible_controls(tmp_path: Pa
     assert "NEW ARCHIVE" not in response.text
     assert "YOUR LOCAL COLLECTION" not in response.text
     assert "EXPORT / 导出产物" not in response.text
+    assert 'id="comments-section"' in response.text
+    assert 'id="comments-fetch"' in response.text
+    assert 'id="comments-snapshot"' in response.text
+    assert 'id="comments-list"' in response.text
+    assert 'id="comments-download"' in response.text
+    assert 'for="comments-snapshot"' in response.text
     asset_version = re.search(r'/static/app\.css\?v=([0-9a-f]{12})', response.text)
     assert asset_version is not None
     assert f'/static/app.js?v={asset_version.group(1)}' in response.text
@@ -74,6 +80,7 @@ def test_frontend_assets_are_served_and_api_remains_available(tmp_path: Path) ->
     assert ".archive-layout" in stylesheet.text
     assert ".record-menu" in stylesheet.text
     assert ".task-index" not in stylesheet.text
+    assert ".comment-list" in stylesheet.text
     assert script.status_code == 200
     assert "AbortController" in script.text
     assert client.get("/api/status").status_code == 200

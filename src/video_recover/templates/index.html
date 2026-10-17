@@ -142,6 +142,20 @@
                 </div>
                 <pre id="transcript-text" class="transcript-body">等待原生 MLX Worker 转写。</pre>
               </section>
+
+              <section class="copy-section comments-section" id="comments-section" aria-labelledby="comments-title">
+                <div class="section-heading">
+                  <h3 id="comments-title">评论</h3>
+                  <button class="text-action" id="comments-fetch" type="button">拉取评论</button>
+                </div>
+                <div class="comments-toolbar">
+                  <label class="sr-only" for="comments-snapshot">选择评论快照</label>
+                  <select id="comments-snapshot" disabled hidden></select>
+                  <a id="comments-download" class="text-action" href="#" hidden>下载 MD</a>
+                </div>
+                <p id="comments-meta" class="comments-meta" aria-live="polite">还没有评论快照。只拉一级评论，按点赞排序。</p>
+                <ol id="comments-list" class="comment-list"></ol>
+              </section>
             </div>
           </div>
 

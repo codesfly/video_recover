@@ -9,6 +9,9 @@
     "transcribing",
   ]);
   const RETRY_STATES = new Set(["failed", "partial"]);
+  const COMMENT_ACTIVE_STATES = new Set(["queued", "running"]);
+  const COMMENT_SNAPSHOT_STATES = new Set(["completed", "partial"]);
+  const COMMENT_DEFAULT_META = "还没有评论快照。只拉一级评论，按点赞排序。";
   const VIDEO_STATES = new Set([
     "awaiting_transcription",
     "transcribing",
@@ -34,6 +37,9 @@
     pollController: null,
     pollTimer: null,
     toastTimer: null,
+    commentTaskId: null,
+    commentJobId: null,
+    commentRenderedKey: null,
   };
 
   const elements = {
@@ -67,6 +73,11 @@
     deleteDialog: document.querySelector("#delete-dialog"),
     confirmDelete: document.querySelector("#confirm-delete"),
     toast: document.querySelector("#toast"),
+    commentsFetch: document.querySelector("#comments-fetch"),
+    commentsSnapshot: document.querySelector("#comments-snapshot"),
+    commentsDownload: document.querySelector("#comments-download"),
+    commentsMeta: document.querySelector("#comments-meta"),
+    commentsList: document.querySelector("#comments-list"),
   };
 
   function errorMessage(payload, fallback) {
@@ -236,6 +247,127 @@
     });
   }
 
+  function formatShortDate(value) {
+    if (!value) return "—";
+    return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(
+      new Date(value),
+    );
+  }
+
+  function snapshotLabel(job) {
+    const complete = job.status === "completed" && !job.has_more_remaining;
+    return `${formatDate(job.finished_at, true)} · ${job.fetched_count} 条 · ${complete ? "已拉全" : "未拉全"}`;
+  }
+
+  function createCommentItem(comment) {
+    const item = document.createElement("li");
+    item.className = "comment-item";
+    const meta = document.createElement("span");
+    meta.className = "comment-item-meta";
+    meta.textContent = [
+      `👍${comment.digg_count}`,
+      `💬${comment.reply_count}`,
+      formatShortDate(comment.created_at),
+      comment.ip_label || "—",
+    ].join(" · ");
+    const text = document.createElement("p");
+    text.className = "comment-item-text";
+    text.textContent = comment.text;
+    item.append(meta, text);
+    return item;
+  }
+
+  function resetComments(taskId) {
+    state.commentTaskId = taskId;
+    state.commentJobId = null;
+    state.commentRenderedKey = null;
+    elements.commentsSnapshot.replaceChildren();
+    elements.commentsSnapshot.disabled = true;
+    elements.commentsSnapshot.hidden = true;
+    elements.commentsDownload.hidden = true;
+    elements.commentsList.replaceChildren();
+    elements.commentsMeta.textContent = COMMENT_DEFAULT_META;
+  }
+
+  async function loadComments(task, signal) {
+    if (state.commentTaskId !== task.id) resetComments(task.id);
+    let jobs;
+    try {
+      jobs = await api(`/api/tasks/${task.id}/comments`, { signal });
+    } catch (error) {
+      if (error.name === "AbortError") throw error;
+      return;
+    }
+    if (state.selectedId !== task.id) return;
+
+    const active = jobs.find((job) => COMMENT_ACTIVE_STATES.has(job.status));
+    const snapshots = jobs.filter((job) => COMMENT_SNAPSHOT_STATES.has(job.status));
+    const latest = jobs[0];
+    elements.commentsFetch.disabled = Boolean(active) || task.status === "cancelled";
+    elements.commentsFetch.textContent = active ? "拉取中…" : snapshots.length ? "刷新快照" : "拉取评论";
+
+    if (!snapshots.some((job) => job.id === state.commentJobId)) {
+      state.commentJobId = snapshots[0]?.id || null;
+    }
+    const options = snapshots.map((job) => {
+      const option = document.createElement("option");
+      option.value = job.id;
+      option.textContent = snapshotLabel(job);
+      option.selected = job.id === state.commentJobId;
+      return option;
+    });
+    elements.commentsSnapshot.replaceChildren(...options);
+    elements.commentsSnapshot.disabled = snapshots.length < 2;
+    elements.commentsSnapshot.hidden = snapshots.length === 0;
+    elements.commentsDownload.hidden = snapshots.length === 0;
+    elements.commentsDownload.href = `/api/tasks/${task.id}/comments/latest.md`;
+
+    let note = "";
+    if (active) note = "正在后台拉取评论…";
+    else if (latest?.status === "failed") note = `上次拉取失败：${latest.error_message || "请稍后重试"}`;
+
+    if (!state.commentJobId) {
+      elements.commentsList.replaceChildren();
+      elements.commentsMeta.textContent = note || COMMENT_DEFAULT_META;
+      return;
+    }
+    const renderKey = `${task.id}:${state.commentJobId}`;
+    if (state.commentRenderedKey !== renderKey) {
+      let view;
+      try {
+        view = await api(`/api/tasks/${task.id}/comments/${state.commentJobId}?limit=100`, {
+          signal,
+        });
+      } catch (error) {
+        if (error.name === "AbortError") throw error;
+        elements.commentsMeta.textContent = error.message;
+        return;
+      }
+      if (state.selectedId !== task.id || `${task.id}:${state.commentJobId}` !== renderKey) return;
+      elements.commentsList.replaceChildren(...view.comments.map(createCommentItem));
+      elements.commentsList.dataset.total = String(view.total_in_snapshot);
+      state.commentRenderedKey = renderKey;
+    }
+    const total = Number(elements.commentsList.dataset.total || 0);
+    const shown = elements.commentsList.children.length;
+    const summary = total > shown ? `共 ${total} 条，显示点赞最高的 ${shown} 条` : `共 ${total} 条，按点赞排序`;
+    elements.commentsMeta.textContent = note ? `${summary} · ${note}` : summary;
+  }
+
+  async function fetchComments() {
+    const taskId = state.selectedId;
+    if (!taskId) return;
+    elements.commentsFetch.disabled = true;
+    try {
+      await api(`/api/tasks/${taskId}/comments`, { method: "POST", body: JSON.stringify({}) });
+      showToast("已开始拉取评论");
+      await refreshNow();
+    } catch (error) {
+      showToast(error.message);
+      elements.commentsFetch.disabled = false;
+    }
+  }
+
   async function renderRecord(task, signal) {
     state.selectedTask = task;
     elements.recordEmpty.hidden = true;
@@ -269,6 +401,7 @@
       elements.videoPlayer.load();
     }
     updateArtifactLinks(task);
+    await loadComments(task, signal);
 
     if (!task.aweme_id) return;
     const [metadata, transcript] = await Promise.all([
@@ -383,6 +516,12 @@
   function bindEvents() {
     elements.submitForm.addEventListener("submit", submitVideo);
     elements.retryButton.addEventListener("click", retrySelected);
+    elements.commentsFetch.addEventListener("click", fetchComments);
+    elements.commentsSnapshot.addEventListener("change", () => {
+      state.commentJobId = elements.commentsSnapshot.value || null;
+      const task = state.tasks.find((item) => item.id === state.selectedId);
+      if (task) loadComments(task).catch(() => {});
+    });
     elements.deleteButton.addEventListener("click", () => elements.deleteDialog.showModal());
     elements.deleteDialog.addEventListener("close", () => {
       if (elements.deleteDialog.returnValue === "delete") deleteSelected();
