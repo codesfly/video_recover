@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from dataclasses import asdict
 from datetime import datetime
 from typing import Annotated, Literal
 
@@ -9,7 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from video_recover.config import Settings
-from video_recover.domain import Segment, Task
+from video_recover.domain import CommentJob, Segment, Task
 from video_recover.errors import InvalidTransition, TranscriptionFailed, UserFacingError
 from video_recover.service import VideoService
 
@@ -33,6 +34,41 @@ class TaskResponse(BaseModel):
     error_message: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class CommentJobCreate(BaseModel):
+    max_comments: int | None = Field(default=None, ge=1, le=1000)
+
+
+class CommentJobResponse(BaseModel):
+    id: str
+    task_id: str
+    status: str
+    max_comments: int
+    fetched_count: int
+    pages: int
+    has_more_remaining: bool
+    error_code: str | None
+    error_message: str | None
+    created_at: datetime
+    finished_at: datetime | None
+
+
+class CommentResponse(BaseModel):
+    cid: str
+    text: str
+    digg_count: int
+    reply_count: int
+    created_at: datetime | None
+    ip_label: str | None
+    nickname: str | None
+
+
+class CommentSnapshotResponse(BaseModel):
+    job: CommentJobResponse
+    fetched_at: datetime
+    total_in_snapshot: int
+    comments: list[CommentResponse]
 
 
 class CookieUpdate(BaseModel):
@@ -108,6 +144,22 @@ def task_response(task: Task) -> TaskResponse:
     )
 
 
+def comment_job_response(job: CommentJob) -> CommentJobResponse:
+    return CommentJobResponse(
+        id=job.id,
+        task_id=job.task_id,
+        status=job.status.value,
+        max_comments=job.max_comments,
+        fetched_count=job.fetched_count,
+        pages=job.pages,
+        has_more_remaining=job.has_more_remaining,
+        error_code=job.error_code,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        finished_at=job.finished_at,
+    )
+
+
 def build_router(service: VideoService, settings: Settings) -> APIRouter:
     router = APIRouter()
 
@@ -162,8 +214,60 @@ def build_router(service: VideoService, settings: Settings) -> APIRouter:
         try:
             service.delete(task_id)
         except InvalidTransition:
-            raise HTTPException(status_code=409, detail="任务处理中，暂时不能删除") from None
+            raise HTTPException(
+                status_code=409, detail="任务处理中或正在拉取评论，暂时不能删除"
+            ) from None
         return Response(status_code=204)
+
+    @router.post(
+        "/api/tasks/{task_id}/comments", response_model=CommentJobResponse, status_code=202
+    )
+    def request_comments(task_id: str, body: CommentJobCreate) -> CommentJobResponse:
+        get_task_or_404(task_id)
+        try:
+            job, _created = service.request_comments(task_id, max_comments=body.max_comments)
+        except InvalidTransition:
+            raise HTTPException(status_code=409, detail="已取消的任务不能拉取评论") from None
+        return comment_job_response(job)
+
+    @router.get("/api/tasks/{task_id}/comments", response_model=list[CommentJobResponse])
+    def list_comment_jobs(task_id: str) -> list[CommentJobResponse]:
+        get_task_or_404(task_id)
+        return [comment_job_response(job) for job in service.repository.list_comment_jobs(task_id)]
+
+    # Registered before /{job_id} so "latest.md" is never read as a job id.
+    @router.get("/api/tasks/{task_id}/comments/latest.md")
+    def latest_comments_markdown(task_id: str) -> FileResponse:
+        task = get_task_or_404(task_id)
+        path = service.comments_dir(task) / "latest.md"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="还没有评论快照")
+        return FileResponse(
+            path, media_type="text/markdown; charset=utf-8", filename="comments.md"
+        )
+
+    @router.get(
+        "/api/tasks/{task_id}/comments/{job_id}", response_model=CommentSnapshotResponse
+    )
+    def read_comments(
+        task_id: str,
+        job_id: str,
+        sort: Literal["likes", "time"] = "likes",
+        limit: int = 100,
+    ) -> CommentSnapshotResponse:
+        get_task_or_404(task_id)
+        try:
+            view = service.read_comments(task_id, job_id=job_id, sort=sort, limit=limit)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="评论快照不存在") from None
+        if view is None:
+            raise HTTPException(status_code=404, detail="评论快照不存在")
+        return CommentSnapshotResponse(
+            job=comment_job_response(view.job),
+            fetched_at=view.fetched_at,
+            total_in_snapshot=view.total_in_snapshot,
+            comments=[CommentResponse(**asdict(comment)) for comment in view.comments],
+        )
 
     @router.get("/api/tasks/{task_id}/artifacts/{artifact}")
     def get_artifact(task_id: str, artifact: str) -> FileResponse:

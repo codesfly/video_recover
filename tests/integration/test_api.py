@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from video_recover.comments import CommentHarvest, map_comment
 from video_recover.config import Settings
 from video_recover.crypto import CookieVault
 from video_recover.domain import TaskStatus
@@ -29,7 +30,7 @@ class StubParser:
         )
 
 
-def make_client(tmp_path: Path) -> tuple[TestClient, VideoService]:
+def make_client(tmp_path: Path, comment_fetcher=None) -> tuple[TestClient, VideoService]:
     settings = Settings(
         data_dir=tmp_path / "data",
         worker_token="test-worker-token-long-enough",
@@ -40,6 +41,7 @@ def make_client(tmp_path: Path) -> tuple[TestClient, VideoService]:
         repository=Repository(settings.database_path),
         parser=StubParser(),
         cookie_vault=CookieVault(settings.secret_key_path),
+        comment_fetcher=comment_fetcher,
     )
     app = create_app(settings, service=service, start_runner=False)
     return TestClient(app), service
@@ -180,3 +182,41 @@ def test_openapi_includes_public_and_internal_contracts(tmp_path: Path) -> None:
 
     assert "/api/tasks" in schema["paths"]
     assert "/internal/worker/lease" in schema["paths"]
+    assert "/api/tasks/{task_id}/comments" in schema["paths"]
+    assert "/api/tasks/{task_id}/comments/{job_id}" in schema["paths"]
+
+
+class ThreeCommentFetcher:
+    def fetch(self, canonical_url, *, max_comments, deadline_seconds):
+        comments = tuple(map_comment({"cid": c, "text": c, "digg_count": int(c)}) for c in "193")
+        return CommentHarvest(comments, 1, False, 3, None)
+
+
+def test_comment_endpoints_queue_list_read_and_download(tmp_path: Path) -> None:
+    client, service = make_client(tmp_path, comment_fetcher=ThreeCommentFetcher())
+    task_id = client.post("/api/tasks", json={"url": TEST_URL}).json()["id"]
+
+    created = client.post(f"/api/tasks/{task_id}/comments", json={"max_comments": 50})
+    assert created.status_code == 202 and created.json()["status"] == "queued"
+    too_many = client.post(f"/api/tasks/{task_id}/comments", json={"max_comments": 5000})
+    assert too_many.status_code == 422
+    assert client.get(f"/api/tasks/{task_id}/comments/latest.md").status_code == 404
+
+    service.process_comment_job(service.repository.claim_next_comment_job())
+
+    jobs = client.get(f"/api/tasks/{task_id}/comments").json()
+    assert jobs[0]["status"] == "completed" and jobs[0]["fetched_count"] == 3
+    view = client.get(f"/api/tasks/{task_id}/comments/{jobs[0]['id']}?limit=2").json()
+    assert [c["digg_count"] for c in view["comments"]] == [9, 3]
+    assert view["total_in_snapshot"] == 3
+    markdown = client.get(f"/api/tasks/{task_id}/comments/latest.md")
+    assert markdown.status_code == 200 and markdown.text.startswith("# 评论快照")
+    assert client.get(f"/api/tasks/{task_id}/comments/not-a-job").status_code == 404
+    assert client.post("/api/tasks/missing/comments", json={}).status_code == 404
+
+
+def test_comment_request_on_cancelled_task_is_409(tmp_path: Path) -> None:
+    client, service = make_client(tmp_path, comment_fetcher=ThreeCommentFetcher())
+    task_id = client.post("/api/tasks", json={"url": TEST_URL}).json()["id"]
+    service.repository.transition(task_id, TaskStatus.CANCELLED, progress=0, message="取消")
+    assert client.post(f"/api/tasks/{task_id}/comments", json={}).status_code == 409
